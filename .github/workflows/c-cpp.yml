@@ -1,4 +1,4 @@
-name: C/C++ CI
+name: Build and test DSL compiler
 
 on:
   push:
@@ -8,16 +8,19 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: configure
-      run: ./configure
-    - name: make
-      run: make
-    - name: make check
-      run: make check
-    - name: make distcheck
-      run: make distcheck
+      - uses: actions/checkout@v4
+
+      - name: Install compiler
+        run: sudo apt-get update && sudo apt-get install -y g++
+
+      - name: Build C++ DSL compiler
+        run: |
+          mkdir -p bin
+          g++ -std=c++17 -O2 -Wall -Wextra compiler/main.cpp -o bin/delivery_compiler
+
+      - name: Run DSL smoke test
+        run: |
+          ./bin/delivery_compiler examples/pedido_basico.dsl

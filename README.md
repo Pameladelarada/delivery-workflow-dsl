@@ -1,4 +1,4 @@
-# DSL Delivery Workflow Compiler
+# Trabajo final_compiladores
 
 Proyecto academico-practico que combina compiladores, lenguajes DSL y automatizacion de workflows logisticos para delivery.
 
@@ -9,20 +9,31 @@ Proyecto academico-practico que combina compiladores, lenguajes DSL y automatiza
 - `examples/`: programas DSL de prueba.
 - `docs/`: especificacion tecnica del proyecto.
 - `Guia_instalacion_flask_y_uso_web.docx`: guia Word para instalar Flask y ver la pagina web.
+- `run_web.ps1`: script recomendado para preparar dependencias, compilar y abrir la web.
 
 ## Ejecucion rapida
 
-1. Compila el compilador C++:
+Forma recomendada:
 
 ```powershell
-.\build.ps1
+powershell -ExecutionPolicy Bypass -File .\run_web.ps1
 ```
 
-2. Crea un entorno virtual e instala Flask:
+El script crea `.venv`, instala Flask, compila el programa C++ si hace falta y abre `http://127.0.0.1:5000`.
+
+## Ejecucion manual
+
+1. Crea un entorno virtual e instala Flask:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+2. Compila el compilador C++:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
 3. Ejecuta la web:

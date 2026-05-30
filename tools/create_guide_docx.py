@@ -10,6 +10,8 @@ from docx.shared import Inches, Pt, RGBColor
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "Guia_instalacion_flask_y_uso_web.docx"
+PROJECT_NAME = "Trabajo final_compiladores"
+PROJECT_PATH = rf"C:\Usil\6to_ciclo_Compiladores\{PROJECT_NAME}"
 
 
 def set_cell_shading(cell, fill):
@@ -108,7 +110,7 @@ r.font.color.rgb = RGBColor(11, 37, 69)
 
 subtitle = doc.add_paragraph()
 subtitle.paragraph_format.space_after = Pt(12)
-subtitle.add_run("Proyecto: DSL Delivery Workflow Compiler con Flask y C++").bold = True
+subtitle.add_run(f"Proyecto: {PROJECT_NAME} con Flask y C++").bold = True
 
 doc.add_heading("Objetivo de esta guia", level=1)
 doc.add_paragraph(
@@ -142,6 +144,7 @@ rows = [
     ("examples", "Programas DSL de prueba."),
     ("requirements.txt", "Dependencias de Python necesarias para ejecutar Flask."),
     ("build.ps1", "Script para compilar el programa C++ en Windows."),
+    ("run_web.ps1", "Script recomendado para preparar el entorno, compilar, ejecutar Flask y abrir el navegador."),
 ]
 for left, right in rows:
     cells = table.add_row().cells
@@ -155,35 +158,43 @@ add_step(
     doc,
     "1. Abrir PowerShell en la carpeta del proyecto",
     "Ubicate en la carpeta donde se encuentran README.md, build.ps1 y requirements.txt.",
-    r"cd C:\Users\delar\Documents\Codex\2026-05-24\tu-proyecto-combina-tres-reas-importantes",
+    rf'cd "{PROJECT_PATH}"',
 )
 add_step(
     doc,
-    "2. Crear un entorno virtual",
+    "2. Ejecutar el arranque automatico recomendado",
+    "Este comando crea el entorno virtual, instala Flask si falta, compila el compilador C++ y abre la pagina en el navegador.",
+    r"powershell -ExecutionPolicy Bypass -File .\run_web.ps1",
+)
+
+doc.add_heading("Instalacion manual alternativa", level=1)
+add_step(
+    doc,
+    "1. Crear un entorno virtual",
     "Este paso guarda las dependencias dentro del proyecto y evita errores de permisos en Windows.",
     "python -m venv .venv",
 )
 add_step(
     doc,
-    "3. Instalar Flask dentro del entorno virtual",
+    "2. Instalar Flask dentro del entorno virtual",
     "Ejecuta el siguiente comando para instalar las dependencias declaradas en requirements.txt.",
     r".\.venv\Scripts\python.exe -m pip install -r requirements.txt",
 )
 add_step(
     doc,
-    "4. Compilar el compilador C++",
+    "3. Compilar el compilador C++",
     "Este comando genera el ejecutable bin\\delivery_compiler.exe. La web lo necesita para analizar el DSL.",
-    r".\build.ps1",
+    r"powershell -ExecutionPolicy Bypass -File .\build.ps1",
 )
 add_step(
     doc,
-    "5. Ejecutar la aplicacion Flask",
+    "4. Ejecutar la aplicacion Flask",
     "Cuando el servidor este activo, la terminal mostrara una direccion local.",
     r".\.venv\Scripts\python.exe web\app.py",
 )
 add_step(
     doc,
-    "6. Abrir la pagina web",
+    "5. Abrir la pagina web",
     "Abre el navegador y entra a la siguiente direccion local.",
     "http://127.0.0.1:5000",
 )
@@ -192,7 +203,7 @@ doc.add_heading("Como usar la pagina", level=1)
 add_bullet(doc, "Escribe o modifica el codigo DSL en el editor de la izquierda.")
 add_bullet(doc, "Presiona Ejecutar workflow.")
 add_bullet(doc, "Revisa el estado, los logs, errores y tokens reconocidos.")
-add_bullet(doc, "Si aparece un error indicando que falta bin/delivery_compiler.exe, vuelve a ejecutar .\\build.ps1.")
+add_bullet(doc, "Si aparece un error indicando que falta bin/delivery_compiler.exe, ejecuta powershell -ExecutionPolicy Bypass -File .\\build.ps1.")
 
 doc.add_heading("Ejemplo de DSL valido", level=1)
 add_code(
@@ -228,9 +239,10 @@ for cell in error_hdr:
     set_cell_shading(cell, "F2F4F7")
 
 for problem, solution in [
+    ("PowerShell no permite ejecutar scripts", "Usa powershell -ExecutionPolicy Bypass -File .\\run_web.ps1."),
     ("Flask no esta instalado", "Ejecuta .\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt."),
     ("Error de permisos al instalar paquetes", "Usa el entorno virtual: python -m venv .venv."),
-    ("No existe delivery_compiler.exe", "Ejecuta .\\build.ps1 desde la raiz del proyecto."),
+    ("No existe delivery_compiler.exe", "Ejecuta powershell -ExecutionPolicy Bypass -File .\\build.ps1 desde la raiz del proyecto."),
     ("No se encontro compilador C++", "Instala MinGW-w64, LLVM/Clang o Visual Studio Build Tools."),
     ("El puerto 5000 esta ocupado", "Cierra el otro servidor o cambia el puerto en web/app.py."),
     ("Error semantico en VALIDAR stock", "Asegurate de declarar stock dentro del bloque PEDIDO y que sea mayor que cero."),
@@ -242,9 +254,11 @@ for problem, solution in [
 doc.add_heading("Comandos principales", level=1)
 add_code(
     doc,
+    "powershell -ExecutionPolicy Bypass -File .\\run_web.ps1\n\n"
+    "# Alternativa manual:\n"
     "python -m venv .venv\n"
     ".\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt\n"
-    ".\\build.ps1\n"
+    "powershell -ExecutionPolicy Bypass -File .\\build.ps1\n"
     ".\\.venv\\Scripts\\python.exe web\\app.py\n"
     "http://127.0.0.1:5000"
 )

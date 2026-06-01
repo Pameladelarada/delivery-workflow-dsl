@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -6,7 +7,8 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template, request
 
 ROOT = Path(__file__).resolve().parents[1]
-COMPILER = ROOT / "bin" / "delivery_compiler.exe"
+COMPILER_NAME = "delivery_compiler.exe" if os.name == "nt" else "delivery_compiler"
+COMPILER = ROOT / "bin" / COMPILER_NAME
 EXAMPLE = ROOT / "examples" / "pedido_basico.dsl"
 
 app = Flask(__name__)
@@ -46,7 +48,7 @@ def compile_dsl():
                 "order": {},
                 "logs": [],
                 "errors": [
-                    "No se encontro bin/delivery_compiler.exe. Ejecuta primero .\\build.ps1 para compilar el programa C++."
+                    f"No se encontro {COMPILER.relative_to(ROOT)}. Compila primero el programa C++."
                 ],
             }
         )
@@ -84,4 +86,5 @@ def compile_dsl():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)

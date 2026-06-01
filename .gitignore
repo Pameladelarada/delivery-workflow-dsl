@@ -1,7 +1,9 @@
+.venv/
 venv/
 __pycache__/
 *.pyc
 bin/
 docx_render/
+docx_render_*/
 server.*.log
 *.log

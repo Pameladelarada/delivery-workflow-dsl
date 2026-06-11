@@ -34,15 +34,34 @@ function renderTokens(items) {
         return;
     }
 
-    items.forEach((token) => {
-        const row = document.createElement("tr");
-        row.innerHTML = `
-            <td>${token.type}</td>
-            <td>${token.lexeme}</td>
-            <td>${token.line}</td>
-            <td>${token.column}</td>
-        `;
-        tokens.appendChild(row);
+    const groupedByType = items.reduce((groups, token) => {
+        if (!groups.has(token.type)) {
+            groups.set(token.type, new Map());
+        }
+        const lexemes = groups.get(token.type);
+        if (!lexemes.has(token.lexeme)) {
+            lexemes.set(token.lexeme, []);
+        }
+        lexemes.get(token.lexeme).push(token);
+        return groups;
+    }, new Map());
+
+    groupedByType.forEach((lexemes, type) => {
+        let firstTypeRow = true;
+
+        lexemes.forEach((group) => {
+            group.forEach((token, index) => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td>${firstTypeRow ? type : ""}</td>
+                    <td>${index === 0 ? token.lexeme : ""}</td>
+                    <td>${token.line}</td>
+                    <td>${token.column}</td>
+                `;
+                tokens.appendChild(row);
+                firstTypeRow = false;
+            });
+        });
     });
 }
 

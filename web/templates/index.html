@@ -14,8 +14,23 @@
                     <p class="eyebrow">Compiladores + DSL + Workflows</p>
                     <h1>Delivery Workflow DSL</h1>
                 </div>
-                <button id="runButton" type="button">Ejecutar workflow</button>
+                <div class="top-actions">
+                    <input id="rulesFile" type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" hidden>
+                    <button id="uploadButton" type="button" class="secondary">Subir reglas</button>
+                    <button id="runButton" type="button">Ejecutar workflow</button>
+                </div>
             </header>
+
+            <section id="rulesPanel" class="panel rules-panel is-hidden">
+                <div class="panel-title">
+                    <div>
+                        <h2>Reglas de negocio cargadas</h2>
+                        <p id="rulesMeta" class="panel-note"></p>
+                    </div>
+                    <button id="useRulesButton" type="button" class="secondary">Usar como base</button>
+                </div>
+                <pre id="rulesText" class="rules-text"></pre>
+            </section>
 
             <div class="editor-grid">
                 <section class="panel editor-panel">
@@ -71,6 +86,56 @@
                         </thead>
                         <tbody id="tokens"></tbody>
                     </table>
+                </div>
+            </section>
+
+            <section class="analysis-section">
+                <div class="section-heading">
+                    <p class="eyebrow">Imagen -> Lexemas -> Tokens -> ER -> AFND -> AFD</p>
+                    <h2>Analisis formal del lenguaje</h2>
+                </div>
+
+                <div class="analysis-grid">
+                    <article class="analysis-card">
+                        <h3>Identificacion de lexemas</h3>
+                        <div id="lexemeGroups" class="analysis-content"></div>
+                    </article>
+
+                    <article class="analysis-card">
+                        <h3>Tokens</h3>
+                        <div class="table-wrap compact-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Token</th>
+                                        <th>Descripcion</th>
+                                        <th>Ejemplo</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tokenDefinitions"></tbody>
+                            </table>
+                        </div>
+                    </article>
+
+                    <article class="analysis-card">
+                        <h3>Expresiones regulares</h3>
+                        <div id="regexDefinitions" class="analysis-content"></div>
+                    </article>
+
+                    <article class="analysis-card">
+                        <h3>AFND</h3>
+                        <div id="nfaDefinitions" class="analysis-content"></div>
+                    </article>
+
+                    <article class="analysis-card">
+                        <h3>AFD equivalente</h3>
+                        <div id="dfaDefinitions" class="analysis-content"></div>
+                    </article>
+
+                    <article class="analysis-card wide-card">
+                        <h3>Tablas de transicion</h3>
+                        <div id="transitionTables" class="analysis-content"></div>
+                    </article>
                 </div>
             </section>
         </section>

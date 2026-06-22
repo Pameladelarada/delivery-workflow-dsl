@@ -15,7 +15,7 @@
                     <h1>Delivery Workflow DSL</h1>
                 </div>
                 <div class="top-actions">
-                    <input id="rulesFile" type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" hidden>
+                    <input id="rulesFile" type="file" accept=".pdf,.docx,.xlsx,.csv,.json,.txt" hidden>
                     <button id="uploadButton" type="button" class="secondary">Subir reglas</button>
                     <button id="runButton" type="button">Ejecutar workflow</button>
                 </div>
@@ -79,9 +79,9 @@
                         <thead>
                             <tr>
                                 <th>Tipo</th>
-                                <th>Lexema</th>
-                                <th>Linea</th>
-                                <th>Columna</th>
+                                <th>Lexemas agrupados</th>
+                                <th>Cantidad</th>
+                                <th>Posiciones</th>
                             </tr>
                         </thead>
                         <tbody id="tokens"></tbody>

@@ -100,13 +100,28 @@ function renderTokens(items) {
         return;
     }
 
-    items.forEach((token) => {
+    const grouped = items.reduce((acc, token) => {
+        if (!acc[token.type]) {
+            acc[token.type] = {
+                type: token.type,
+                lexemes: new Set(),
+                positions: [],
+                count: 0,
+            };
+        }
+        acc[token.type].lexemes.add(token.lexeme);
+        acc[token.type].positions.push(`${token.line}:${token.column}`);
+        acc[token.type].count += 1;
+        return acc;
+    }, {});
+
+    Object.values(grouped).forEach((group) => {
         const row = document.createElement("tr");
         row.innerHTML = `
-            <td>${token.type}</td>
-            <td>${token.lexeme}</td>
-            <td>${token.line}</td>
-            <td>${token.column}</td>
+            <td>${group.type}</td>
+            <td>${[...group.lexemes].join(", ")}</td>
+            <td>${group.count}</td>
+            <td>${group.positions.join(", ")}</td>
         `;
         tokens.appendChild(row);
     });
@@ -226,6 +241,10 @@ async function uploadRules() {
         rulesMeta.textContent = `${result.filename} - ${result.message}`;
         rulesText.textContent = result.text;
         uploadedDslDraft = result.dsl_draft || "";
+        if (uploadedDslDraft.trim()) {
+            source.value = uploadedDslDraft.trim();
+            await compile();
+        }
     } catch (error) {
         rulesPanel.classList.remove("is-hidden");
         rulesMeta.textContent = "Error al procesar archivo";
@@ -247,8 +266,10 @@ rulesFile.addEventListener("change", uploadRules);
 useRulesButton.addEventListener("click", () => {
     if (uploadedDslDraft.trim()) {
         source.value = uploadedDslDraft.trim();
+        compile();
     } else if (rulesText.textContent.trim()) {
         source.value = rulesText.textContent.trim();
+        compile();
     }
 });
 

@@ -1,4 +1,6 @@
+import csv
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -10,9 +12,10 @@ from xml.etree import ElementTree
 from flask import Flask, jsonify, render_template, request
 
 ROOT = Path(__file__).resolve().parents[1]
-COMPILER = ROOT / "bin" / "delivery_compiler.exe"
+COMPILER_NAME = "delivery_compiler.exe" if os.name == "nt" else "delivery_compiler"
+COMPILER = ROOT / "bin" / COMPILER_NAME
 EXAMPLE = ROOT / "examples" / "pedido_basico.dsl"
-ALLOWED_RULE_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".csv", ".txt"}
+ALLOWED_RULE_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".csv", ".json", ".txt"}
 
 app = Flask(__name__)
 
@@ -70,6 +73,40 @@ def extract_xlsx(path: Path) -> str:
         return "\n".join(chunks)
 
 
+def extract_json(path: Path) -> str:
+    data = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
+    lines = []
+
+    def walk(value, prefix=""):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                label = f"{prefix}.{key}" if prefix else str(key)
+                walk(item, label)
+        elif isinstance(value, list):
+            for index, item in enumerate(value, start=1):
+                walk(item, f"{prefix}[{index}]")
+        else:
+            lines.append(f"{prefix}: {value}")
+
+    walk(data)
+    return "\n".join(lines)
+
+
+def extract_csv(path: Path) -> str:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    sample = text.splitlines()
+    if len(sample) < 2:
+        return text
+
+    reader = csv.DictReader(sample)
+    rows = list(reader)
+    if not rows:
+        return text
+
+    first = rows[0]
+    return "\n".join(f"{key}: {value}" for key, value in first.items() if key and value)
+
+
 def extract_pdf_best_effort(path: Path) -> str:
     try:
         from pypdf import PdfReader
@@ -106,14 +143,38 @@ def clean_extracted_text(text: str) -> str:
         printable = sum(1 for char in compact if char.isalnum() or char in " :;.,-_/>=<\"")
         words = re.findall(r"[A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9]{2,}", compact)
         average_word_length = sum(len(word) for word in words) / max(len(words), 1)
+        looks_like_field = ":" in compact and bool(re.search(r"[A-Za-z_]{2,}\s*:", compact))
         if printable / max(len(compact), 1) >= 0.65:
-            if len(words) >= 2 and average_word_length >= 3:
+            if looks_like_field or (len(words) >= 2 and average_word_length >= 3):
                 lines.append(compact)
     return "\n".join(lines)
 
 
 def build_dsl_draft(rules_text: str) -> str:
     lower = rules_text.lower()
+    fields = {
+        "cliente": "Cliente desde reglas",
+        "producto": "Producto desde reglas",
+        "total": "80",
+        "pago": "YAPE",
+        "direccion": "Direccion pendiente",
+        "stock": "1",
+    }
+
+    patterns = {
+        "cliente": r"cliente\s*[:=,]\s*([A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9 ._-]+)",
+        "producto": r"producto\s*[:=,]\s*([A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9 ._-]+)",
+        "total": r"total\s*[:=,]\s*(\d+(?:\.\d+)?)",
+        "pago": r"pago\s*[:=,]\s*([A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9_-]+)",
+        "direccion": r"direccion\s*[:=,]\s*([A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9 ._-]+)",
+        "stock": r"stock\s*[:=,]\s*(\d+(?:\.\d+)?)",
+    }
+
+    for field, pattern in patterns.items():
+        match = re.search(pattern, rules_text, flags=re.IGNORECASE)
+        if match:
+            fields[field] = match.group(1).strip()[:80]
+
     validations = ["VALIDAR stock", "VALIDAR direccion", "VALIDAR pago"]
     if "cliente" in lower:
         validations.append("VALIDAR cliente")
@@ -128,12 +189,12 @@ def build_dsl_draft(rules_text: str) -> str:
     return "\n".join(
         [
             "PEDIDO {",
-            '    cliente: "Cliente desde reglas"',
-            '    producto: "Producto desde reglas"',
-            "    total: 80",
-            "    pago: YAPE",
-            '    direccion: "Direccion pendiente"',
-            "    stock: 1",
+            f'    cliente: "{fields["cliente"]}"',
+            f'    producto: "{fields["producto"]}"',
+            f"    total: {fields['total']}",
+            f"    pago: {fields['pago']}",
+            f'    direccion: "{fields["direccion"]}"',
+            f"    stock: {fields['stock']}",
             "}",
             "",
             *unique_validations,
@@ -157,9 +218,13 @@ def extract_business_rules(path: Path) -> str:
         return extract_xlsx(path)
     if suffix == ".pdf":
         return extract_pdf_best_effort(path)
-    if suffix in {".csv", ".txt"}:
+    if suffix == ".json":
+        return extract_json(path)
+    if suffix == ".csv":
+        return extract_csv(path)
+    if suffix == ".txt":
         return path.read_text(encoding="utf-8", errors="ignore")
-    raise ValueError("Formato no soportado. Usa PDF, Word, Excel, CSV o TXT.")
+    raise ValueError("Formato no soportado. Usa PDF, Word, Excel, CSV, JSON o TXT.")
 
 
 @app.route("/")
@@ -192,7 +257,7 @@ def compile_dsl():
                 "order": {},
                 "logs": [],
                 "errors": [
-                    "No se encontro bin/delivery_compiler.exe. Ejecuta primero .\\build.ps1 para compilar el programa C++."
+                    f"No se encontro {COMPILER.relative_to(ROOT)}. Compila primero el programa C++."
                 ],
             }
         )
@@ -237,7 +302,7 @@ def upload_rules():
 
     suffix = Path(file.filename).suffix.lower()
     if suffix not in ALLOWED_RULE_EXTENSIONS:
-        return jsonify({"success": False, "errors": ["Formato no soportado. Usa PDF, Word, Excel, CSV o TXT."]}), 400
+        return jsonify({"success": False, "errors": ["Formato no soportado. Usa PDF, Word, Excel, CSV, JSON o TXT."]}), 400
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
         file.save(temp.name)
@@ -265,4 +330,5 @@ def upload_rules():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)

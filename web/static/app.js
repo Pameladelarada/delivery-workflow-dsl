@@ -192,15 +192,6 @@ function renderAnalysis(items) {
 }
 
 async function compile() {
-    if (!source.value.trim()) {
-        setStatus(false);
-        renderList(logs, [], "Aun no hay logs.");
-        renderList(errors, ["Sube primero un archivo de reglas de negocio para generar el DSL."], "Error inesperado.");
-        renderTokens([]);
-        renderAnalysis([]);
-        return;
-    }
-
     runButton.disabled = true;
     runButton.textContent = "Ejecutando...";
 
@@ -248,13 +239,11 @@ async function uploadRules() {
         }
         rulesPanel.classList.remove("is-hidden");
         rulesMeta.textContent = `${result.filename} - ${result.message}`;
+        rulesText.textContent = result.text;
         uploadedDslDraft = result.dsl_draft || "";
         if (uploadedDslDraft.trim()) {
             source.value = uploadedDslDraft.trim();
-            rulesText.textContent = uploadedDslDraft.trim();
             await compile();
-        } else {
-            rulesText.textContent = result.text;
         }
     } catch (error) {
         rulesPanel.classList.remove("is-hidden");
@@ -269,11 +258,9 @@ async function uploadRules() {
 }
 
 runButton.addEventListener("click", compile);
-if (resetButton) {
-    resetButton.addEventListener("click", () => {
-        source.value = window.DEFAULT_EXAMPLE;
-    });
-}
+resetButton.addEventListener("click", () => {
+    source.value = window.DEFAULT_EXAMPLE;
+});
 uploadButton.addEventListener("click", () => rulesFile.click());
 rulesFile.addEventListener("change", uploadRules);
 useRulesButton.addEventListener("click", () => {

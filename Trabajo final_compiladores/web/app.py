@@ -71,82 +71,11 @@ def extract_xlsx(path: Path) -> str:
 
 
 def extract_pdf_best_effort(path: Path) -> str:
-    try:
-        from pypdf import PdfReader
-
-        reader = PdfReader(str(path))
-        pages = [page.extract_text() or "" for page in reader.pages]
-        extracted = "\n".join(page.strip() for page in pages if page.strip())
-        if extracted.strip():
-            return extracted
-    except Exception:
-        pass
-
     data = path.read_bytes()
     text = data.decode("latin-1", errors="ignore")
     literal_strings = re.findall(r"\(([^()]{2,})\)", text)
     cleaned = [unescape(item.replace("\\n", " ").replace("\\r", " ")) for item in literal_strings]
     return "\n".join(cleaned)
-
-
-def clean_extracted_text(text: str) -> str:
-    normalized = []
-    for char in text:
-        code = ord(char)
-        if char in "\n\r\t" or 32 <= code <= 126 or char in "áéíóúÁÉÍÓÚñÑüÜ":
-            normalized.append(char)
-        else:
-            normalized.append(" ")
-
-    lines = []
-    for line in "".join(normalized).splitlines():
-        compact = " ".join(line.split())
-        if len(compact) < 2:
-            continue
-        printable = sum(1 for char in compact if char.isalnum() or char in " :;.,-_/>=<\"")
-        words = re.findall(r"[A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9]{2,}", compact)
-        average_word_length = sum(len(word) for word in words) / max(len(words), 1)
-        if printable / max(len(compact), 1) >= 0.65:
-            if len(words) >= 2 and average_word_length >= 3:
-                lines.append(compact)
-    return "\n".join(lines)
-
-
-def build_dsl_draft(rules_text: str) -> str:
-    lower = rules_text.lower()
-    validations = ["VALIDAR stock", "VALIDAR direccion", "VALIDAR pago"]
-    if "cliente" in lower:
-        validations.append("VALIDAR cliente")
-    if "producto" in lower:
-        validations.append("VALIDAR producto")
-
-    unique_validations = []
-    for validation in validations:
-        if validation not in unique_validations:
-            unique_validations.append(validation)
-
-    return "\n".join(
-        [
-            "PEDIDO {",
-            '    cliente: "Cliente desde reglas"',
-            '    producto: "Producto desde reglas"',
-            "    total: 80",
-            "    pago: YAPE",
-            '    direccion: "Direccion pendiente"',
-            "    stock: 1",
-            "}",
-            "",
-            *unique_validations,
-            "",
-            "SI total > 50 {",
-            "    ASIGNAR prioridad_alta",
-            "}",
-            "",
-            "ASIGNAR repartidor",
-            "INICIAR entrega",
-            "FINALIZAR pedido",
-        ]
-    )
 
 
 def extract_business_rules(path: Path) -> str:
@@ -244,18 +173,15 @@ def upload_rules():
         temp_path = Path(temp.name)
 
     try:
-        raw_text = extract_business_rules(temp_path).strip()
-        text = clean_extracted_text(raw_text)
+        text = extract_business_rules(temp_path).strip()
         if not text:
             text = "No se pudo extraer texto legible del archivo. Si es PDF escaneado, convierte el contenido a texto."
-        dsl_draft = build_dsl_draft(text)
         return jsonify(
             {
                 "success": True,
                 "filename": file.filename,
                 "text": text[:12000],
-                "dsl_draft": dsl_draft,
-                "message": "Archivo procesado. Se genero una plantilla DSL compilable a partir de las reglas.",
+                "message": "Archivo procesado. Usa estas reglas como referencia para escribir o ajustar el DSL.",
             }
         )
     except Exception as exc:

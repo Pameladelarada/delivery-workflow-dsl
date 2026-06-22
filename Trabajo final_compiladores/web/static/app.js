@@ -20,7 +20,6 @@ const regexDefinitions = document.querySelector("#regexDefinitions");
 const nfaDefinitions = document.querySelector("#nfaDefinitions");
 const dfaDefinitions = document.querySelector("#dfaDefinitions");
 const transitionTables = document.querySelector("#transitionTables");
-let uploadedDslDraft = "";
 
 const TOKEN_DEFINITIONS = [
     {type: "RESERVED", description: "Palabra reservada del DSL que activa una instruccion del workflow.", example: "PEDIDO, VALIDAR, SI"},
@@ -100,34 +99,15 @@ function renderTokens(items) {
         return;
     }
 
-    const groupedByType = items.reduce((groups, token) => {
-        if (!groups.has(token.type)) {
-            groups.set(token.type, new Map());
-        }
-        const lexemes = groups.get(token.type);
-        if (!lexemes.has(token.lexeme)) {
-            lexemes.set(token.lexeme, []);
-        }
-        lexemes.get(token.lexeme).push(token);
-        return groups;
-    }, new Map());
-
-    groupedByType.forEach((lexemes, type) => {
-        let firstTypeRow = true;
-
-        lexemes.forEach((group) => {
-            group.forEach((token, index) => {
-                const row = document.createElement("tr");
-                row.innerHTML = `
-                    <td>${firstTypeRow ? type : ""}</td>
-                    <td>${index === 0 ? token.lexeme : ""}</td>
-                    <td>${token.line}</td>
-                    <td>${token.column}</td>
-                `;
-                tokens.appendChild(row);
-                firstTypeRow = false;
-            });
-        });
+    items.forEach((token) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${token.type}</td>
+            <td>${token.lexeme}</td>
+            <td>${token.line}</td>
+            <td>${token.column}</td>
+        `;
+        tokens.appendChild(row);
     });
 }
 
@@ -244,12 +224,10 @@ async function uploadRules() {
         rulesPanel.classList.remove("is-hidden");
         rulesMeta.textContent = `${result.filename} - ${result.message}`;
         rulesText.textContent = result.text;
-        uploadedDslDraft = result.dsl_draft || "";
     } catch (error) {
         rulesPanel.classList.remove("is-hidden");
         rulesMeta.textContent = "Error al procesar archivo";
         rulesText.textContent = error.message;
-        uploadedDslDraft = "";
     } finally {
         uploadButton.disabled = false;
         uploadButton.textContent = "Subir reglas";
@@ -264,9 +242,7 @@ resetButton.addEventListener("click", () => {
 uploadButton.addEventListener("click", () => rulesFile.click());
 rulesFile.addEventListener("change", uploadRules);
 useRulesButton.addEventListener("click", () => {
-    if (uploadedDslDraft.trim()) {
-        source.value = uploadedDslDraft.trim();
-    } else if (rulesText.textContent.trim()) {
+    if (rulesText.textContent.trim()) {
         source.value = rulesText.textContent.trim();
     }
 });

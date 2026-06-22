@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DSL Delivery Workflow Compiler</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="app-shell">
+        <section class="workspace">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Compiladores + DSL + Workflows</p>
+                    <h1>Delivery Workflow DSL</h1>
+                </div>
+                <div class="top-actions">
+                    <input id="rulesFile" type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" hidden>
+                    <button id="uploadButton" type="button" class="secondary">Subir reglas</button>
+                    <button id="runButton" type="button">Ejecutar workflow</button>
+                </div>
+            </header>
+
+            <section id="rulesPanel" class="panel rules-panel is-hidden">
+                <div class="panel-title">
+                    <div>
+                        <h2>Reglas de negocio cargadas</h2>
+                        <p id="rulesMeta" class="panel-note"></p>
+                    </div>
+                    <button id="useRulesButton" type="button" class="secondary">Usar como base</button>
+                </div>
+                <pre id="rulesText" class="rules-text"></pre>
+            </section>
+
+            <div class="editor-grid">
+                <section class="panel editor-panel">
+                    <div class="panel-title">
+                        <h2>Codigo DSL</h2>
+                        <button id="resetButton" type="button" class="secondary">Ejemplo</button>
+                    </div>
+                    <textarea id="source" spellcheck="false">{{ example }}</textarea>
+                </section>
+
+                <section class="panel results-panel">
+                    <div class="panel-title">
+                        <h2>Resultado</h2>
+                        <span id="status" class="status neutral">Listo</span>
+                    </div>
+
+                    <div class="summary">
+                        <div>
+                            <span>Cliente</span>
+                            <strong id="client">-</strong>
+                        </div>
+                        <div>
+                            <span>Total</span>
+                            <strong id="total">-</strong>
+                        </div>
+                        <div>
+                            <span>Estado</span>
+                            <strong id="state">Sin ejecutar</strong>
+                        </div>
+                    </div>
+
+                    <h3>Logs del workflow</h3>
+                    <ul id="logs" class="list"></ul>
+
+                    <h3>Errores</h3>
+                    <ul id="errors" class="list errors"></ul>
+                </section>
+            </div>
+
+            <section class="panel token-panel">
+                <div class="panel-title">
+                    <h2>Tokens reconocidos</h2>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Lexema</th>
+                                <th>Linea</th>
+                                <th>Columna</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tokens"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="analysis-section">
+                <div class="section-heading">
+                    <p class="eyebrow">Imagen -> Lexemas -> Tokens -> ER -> AFND -> AFD</p>
+                    <h2>Analisis formal del lenguaje</h2>
+                </div>
+
+                <div class="analysis-grid">
+                    <article class="analysis-card">
+                        <h3>Identificacion de lexemas</h3>
+                        <div id="lexemeGroups" class="analysis-content"></div>
+                    </article>
+
+                    <article class="analysis-card">
+                        <h3>Tokens</h3>
+                        <div class="table-wrap compact-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Token</th>
+                                        <th>Descripcion</th>
+                                        <th>Ejemplo</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tokenDefinitions"></tbody>
+                            </table>
+                        </div>
+                    </article>
+
+                    <article class="analysis-card">
+                        <h3>Expresiones regulares</h3>
+                        <div id="regexDefinitions" class="analysis-content"></div>
+                    </article>
+
+                    <article class="analysis-card">
+                        <h3>AFND</h3>
+                        <div id="nfaDefinitions" class="analysis-content"></div>
+                    </article>
+
+                    <article class="analysis-card">
+                        <h3>AFD equivalente</h3>
+                        <div id="dfaDefinitions" class="analysis-content"></div>
+                    </article>
+
+                    <article class="analysis-card wide-card">
+                        <h3>Tablas de transicion</h3>
+                        <div id="transitionTables" class="analysis-content"></div>
+                    </article>
+                </div>
+            </section>
+        </section>
+    </main>
+
+    <script>
+        window.DEFAULT_EXAMPLE = {{ example|tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

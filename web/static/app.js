@@ -1,6 +1,5 @@
 const source = document.querySelector("#source");
 const runButton = document.querySelector("#runButton");
-const resetButton = document.querySelector("#resetButton");
 const uploadButton = document.querySelector("#uploadButton");
 const rulesFile = document.querySelector("#rulesFile");
 const rulesPanel = document.querySelector("#rulesPanel");
@@ -13,7 +12,6 @@ const total = document.querySelector("#total");
 const state = document.querySelector("#state");
 const logs = document.querySelector("#logs");
 const errors = document.querySelector("#errors");
-const tokens = document.querySelector("#tokens");
 const lexemeGroups = document.querySelector("#lexemeGroups");
 const tokenDefinitions = document.querySelector("#tokenDefinitions");
 const regexDefinitions = document.querySelector("#regexDefinitions");
@@ -117,46 +115,6 @@ function renderList(element, items, emptyText) {
         const li = document.createElement("li");
         li.textContent = item;
         element.appendChild(li);
-    });
-}
-
-function renderTokens(items) {
-    tokens.innerHTML = "";
-    if (!items || !items.length) {
-        const row = document.createElement("tr");
-        row.innerHTML = `<td colspan="4">Sin tokens para mostrar</td>`;
-        tokens.appendChild(row);
-        return;
-    }
-
-    const groupedByType = items.reduce((groups, token) => {
-        if (!groups.has(token.type)) {
-            groups.set(token.type, new Map());
-        }
-        const lexemes = groups.get(token.type);
-        if (!lexemes.has(token.lexeme)) {
-            lexemes.set(token.lexeme, []);
-        }
-        lexemes.get(token.lexeme).push(token);
-        return groups;
-    }, new Map());
-
-    groupedByType.forEach((lexemes, type) => {
-        let firstTypeRow = true;
-
-        lexemes.forEach((group) => {
-            group.forEach((token, index) => {
-                const row = document.createElement("tr");
-                row.innerHTML = `
-                    <td>${escapeHtml(firstTypeRow ? type : "")}</td>
-                    <td>${escapeHtml(index === 0 ? token.lexeme : "")}</td>
-                    <td>${token.line}</td>
-                    <td>${token.column}</td>
-                `;
-                tokens.appendChild(row);
-                firstTypeRow = false;
-            });
-        });
     });
 }
 
@@ -406,7 +364,6 @@ async function compile() {
         total.textContent = result.order?.total ?? "-";
         renderList(logs, result.logs, "Aun no hay logs.");
         renderList(errors, result.errors, "Sin errores.");
-        renderTokens(result.tokens);
         renderAnalysis(result.tokens);
         renderSyntax(result.syntax);
         renderSemantic(result.semantic);
@@ -443,7 +400,7 @@ async function uploadRules() {
         uploadedDslDraft = result.dsl_draft || "";
         if (uploadedDslDraft.trim()) {
             source.value = uploadedDslDraft.trim();
-            rulesText.textContent = uploadedDslDraft.trim();
+            rulesText.textContent = result.text;
             await compile();
         } else {
             rulesText.textContent = result.text;
@@ -461,9 +418,6 @@ async function uploadRules() {
 }
 
 runButton.addEventListener("click", compile);
-resetButton.addEventListener("click", () => {
-    source.value = window.DEFAULT_EXAMPLE;
-});
 uploadButton.addEventListener("click", () => rulesFile.click());
 rulesFile.addEventListener("change", uploadRules);
 useRulesButton.addEventListener("click", () => {
@@ -476,7 +430,6 @@ useRulesButton.addEventListener("click", () => {
     }
 });
 
-renderTokens([]);
 renderAnalysis([]);
 renderSyntax(null);
 renderSemantic(null);

@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import tempfile
+import unicodedata
 import zipfile
 from html import unescape
 from pathlib import Path
@@ -13,7 +14,6 @@ from flask import Flask, jsonify, render_template, request
 ROOT = Path(__file__).resolve().parents[1]
 COMPILER_NAME = "delivery_compiler.exe" if os.name == "nt" else "delivery_compiler"
 COMPILER = ROOT / "bin" / COMPILER_NAME
-EXAMPLE = ROOT / "examples" / "pedido_basico.dsl"
 ALLOWED_RULE_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".csv", ".txt"}
 
 app = Flask(__name__)
@@ -25,10 +25,6 @@ def disable_html_cache(response):
         response.headers["Cache-Control"] = "no-store, max-age=0"
         response.headers["Pragma"] = "no-cache"
     return response
-
-
-def load_example() -> str:
-    return EXAMPLE.read_text(encoding="utf-8")
 
 
 def xml_text(path: Path, xml_names: list[str]) -> str:
@@ -111,44 +107,133 @@ def clean_extracted_text(text: str) -> str:
     lines = []
     for line in "".join(normalized).splitlines():
         compact = " ".join(line.split())
-        if len(compact) < 2:
+        if not compact:
             continue
         printable = sum(1 for char in compact if char.isalnum() or char in " :;.,-_/>=<\"")
-        words = re.findall(r"[A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9]{2,}", compact)
-        average_word_length = sum(len(word) for word in words) / max(len(words), 1)
-        if printable / max(len(compact), 1) >= 0.65:
-            if len(words) >= 2 and average_word_length >= 3:
-                lines.append(compact)
+        if printable / max(len(compact), 1) >= 0.65 and re.search(r"[A-Za-z0-9ÁÉÍÓÚáéíóúÑñÜü]", compact):
+            lines.append(compact)
     return "\n".join(lines)
 
 
+RULE_LABELS = {
+    "PEDIDO": "pedido_id",
+    "EMPRESA": "empresa",
+    "RUC": "ruc",
+    "FECHA": "fecha",
+    "CLIENTE": "cliente",
+    "DIRECCION": "direccion",
+    "PRODUCTO": "producto",
+    "SUBTOTAL": "subtotal",
+    "COSTO ENVIO": "costo_envio",
+    "IGV": "igv",
+    "TOTAL": "total",
+    "METODO PAGO": "pago",
+    "PAGO": "pago",
+    "ESTADO": "estado",
+    "STOCK": "stock",
+}
+
+
+def normalize_rule_label(value: str) -> str:
+    ascii_value = "".join(
+        char for char in unicodedata.normalize("NFD", value) if unicodedata.category(char) != "Mn"
+    )
+    return re.sub(r"[^A-Z0-9]+", " ", ascii_value.upper()).strip()
+
+
+def extract_rule_fields(rules_text: str) -> dict[str, str]:
+    lines = [" ".join(line.split()) for line in rules_text.splitlines() if line.strip()]
+    fields = {}
+    for index, line in enumerate(lines):
+        pair = re.match(r"^([^,:=]{2,40})\s*[:,=]\s*(.+)$", line)
+        if pair:
+            field = RULE_LABELS.get(normalize_rule_label(pair.group(1)))
+            if field:
+                fields[field] = pair.group(2).strip()
+                continue
+
+        field = RULE_LABELS.get(normalize_rule_label(line))
+        if field and index + 1 < len(lines):
+            next_line = lines[index + 1]
+            if normalize_rule_label(next_line) not in RULE_LABELS:
+                fields[field] = next_line
+    return fields
+
+
+def dsl_string(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip().replace('"', "'")[:160]
+
+
+def dsl_number(value: str, fallback: str) -> str:
+    match = re.search(r"\d[\d.,]*", value)
+    if not match:
+        return fallback
+    number = match.group(0)
+    if "," in number and "." in number:
+        number = number.replace(",", "")
+    else:
+        number = number.replace(",", ".")
+    try:
+        parsed = float(number)
+    except ValueError:
+        return fallback
+    return str(int(parsed)) if parsed.is_integer() else f"{parsed:.2f}".rstrip("0").rstrip(".")
+
+
+def dsl_identifier(value: str, fallback: str) -> str:
+    identifier = normalize_rule_label(value).replace(" ", "_")
+    return identifier[:60] or fallback
+
+
 def build_dsl_draft(rules_text: str) -> str:
-    lower = rules_text.lower()
+    extracted = extract_rule_fields(rules_text)
     fields = {
-        "cliente": "Cliente desde reglas",
-        "producto": "Producto desde reglas",
-        "total": "80",
-        "pago": "YAPE",
-        "direccion": "Direccion pendiente",
-        "stock": "1",
+        "cliente": extracted.get("cliente", "Cliente no identificado"),
+        "producto": extracted.get("producto", "Producto no identificado"),
+        "total": dsl_number(extracted.get("total", ""), "0"),
+        "pago": dsl_identifier(extracted.get("pago", ""), "NO_IDENTIFICADO"),
+        "direccion": extracted.get("direccion", "Direccion no identificada"),
     }
-    patterns = {
-        "cliente": r"cliente\s*[:=,]\s*([A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9 ._-]+)",
-        "producto": r"producto\s*[:=,]\s*([A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9 ._-]+)",
-        "total": r"total\s*[:=,]\s*(\d+(?:\.\d+)?)",
-        "pago": r"pago\s*[:=,]\s*([A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9_-]+)",
-        "direccion": r"direccion\s*[:=,]\s*([A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9 ._-]+)",
-        "stock": r"stock\s*[:=,]\s*(\d+(?:\.\d+)?)",
-    }
-    for field, pattern in patterns.items():
-        match = re.search(pattern, rules_text, flags=re.IGNORECASE)
-        if match:
-            fields[field] = match.group(1).strip()[:80]
+
+    quantities = re.findall(r"\bx\s*(\d+(?:[.,]\d+)?)", fields["producto"], flags=re.IGNORECASE)
+    inferred_stock = sum(float(quantity.replace(",", ".")) for quantity in quantities)
+    stock_fallback = str(int(inferred_stock)) if inferred_stock and inferred_stock.is_integer() else "1"
+    fields["stock"] = dsl_number(extracted.get("stock", ""), stock_fallback)
+
+    property_specs = [
+        ("pedido_id", "texto"),
+        ("empresa", "texto"),
+        ("ruc", "texto"),
+        ("fecha", "texto"),
+        ("cliente", "texto"),
+        ("direccion", "texto"),
+        ("producto", "texto"),
+        ("subtotal", "numero"),
+        ("costo_envio", "numero"),
+        ("igv", "numero"),
+        ("total", "numero"),
+        ("pago", "identificador"),
+        ("estado", "identificador"),
+        ("stock", "numero"),
+    ]
+    values = {**extracted, **fields}
+    properties = []
+    for name, value_type in property_specs:
+        if name not in values:
+            continue
+        value = values[name]
+        if value_type == "texto":
+            rendered = f'"{dsl_string(value)}"'
+        elif value_type == "numero":
+            rendered = dsl_number(value, "0")
+        else:
+            rendered = dsl_identifier(value, "NO_IDENTIFICADO")
+        properties.append(f"    {name}: {rendered}")
 
     validations = ["VALIDAR stock", "VALIDAR direccion", "VALIDAR pago"]
-    if "cliente" in lower:
+    if "cliente" in extracted:
         validations.append("VALIDAR cliente")
-    if "producto" in lower:
+    if "producto" in extracted:
         validations.append("VALIDAR producto")
 
     unique_validations = []
@@ -159,12 +244,7 @@ def build_dsl_draft(rules_text: str) -> str:
     return "\n".join(
         [
             "PEDIDO {",
-            f'    cliente: "{fields["cliente"]}"',
-            f'    producto: "{fields["producto"]}"',
-            f"    total: {fields['total']}",
-            f"    pago: {fields['pago']}",
-            f'    direccion: "{fields["direccion"]}"',
-            f"    stock: {fields['stock']}",
+            *properties,
             "}",
             "",
             *unique_validations,
@@ -195,7 +275,7 @@ def extract_business_rules(path: Path) -> str:
 
 @app.route("/")
 def index():
-    return render_template("index.html", example=load_example())
+    return render_template("index.html")
 
 
 @app.post("/compile")

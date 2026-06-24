@@ -41,6 +41,50 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertIn("total: 95", payload["dsl_draft"])
         self.assertNotIn('cliente: "Carlos"', payload["dsl_draft"])
 
+    def test_tabular_label_value_rules_preserve_all_invoice_fields(self):
+        rules = """PEDIDO
+PED-2026001
+EMPRESA
+Delivery Express SAC
+RUC
+20601234567
+FECHA
+22/06/2026 19:35
+CLIENTE
+Juan Perez
+DIRECCION
+Av. Los Alamos 123, Lima
+PRODUCTO
+Pizza Familiar x1, Gaseosa 1.5L x1
+SUBTOTAL
+45.0
+COSTO ENVIO
+5.0
+IGV
+8.1
+TOTAL
+58.1
+METODO PAGO
+Yape
+ESTADO
+ENTREGADO
+"""
+        response = self.client.post(
+            "/upload-rules",
+            data={"rules": (io.BytesIO(rules.encode("utf-8")), "boleta.txt")},
+            content_type="multipart/form-data",
+        )
+        draft = response.get_json()["dsl_draft"]
+
+        self.assertIn('pedido_id: "PED-2026001"', draft)
+        self.assertIn('empresa: "Delivery Express SAC"', draft)
+        self.assertIn('cliente: "Juan Perez"', draft)
+        self.assertIn('producto: "Pizza Familiar x1, Gaseosa 1.5L x1"', draft)
+        self.assertIn("total: 58.1", draft)
+        self.assertIn("pago: YAPE", draft)
+        self.assertIn("estado: ENTREGADO", draft)
+        self.assertIn("stock: 2", draft)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

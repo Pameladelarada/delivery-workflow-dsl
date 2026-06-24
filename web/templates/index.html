@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>DSL Delivery Workflow Compiler</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='analysis-ui-v3') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='analysis-ui-v4') }}">
 </head>
 <body>
     <main class="app-shell">
@@ -16,6 +16,7 @@
                 </div>
                 <div class="top-actions">
                     <input id="rulesFile" type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" hidden>
+                    <textarea id="source" hidden></textarea>
                     <button id="uploadButton" type="button" class="secondary">Subir reglas</button>
                     <button id="runButton" type="button">Ejecutar workflow</button>
                 </div>
@@ -32,60 +33,36 @@
                 <pre id="rulesText" class="rules-text"></pre>
             </section>
 
-            <div class="editor-grid">
-                <section class="panel editor-panel">
-                    <div class="panel-title">
-                        <h2>Codigo DSL</h2>
-                        <button id="resetButton" type="button" class="secondary">Ejemplo</button>
-                    </div>
-                    <textarea id="source" spellcheck="false" placeholder="Sube reglas de negocio o pulsa Ejemplo para comenzar."></textarea>
-                </section>
+            <section class="panel results-panel overview-panel">
+                <div class="panel-title">
+                    <h2>Resultado</h2>
+                    <span id="status" class="status neutral">Listo</span>
+                </div>
 
-                <section class="panel results-panel">
-                    <div class="panel-title">
-                        <h2>Resultado</h2>
-                        <span id="status" class="status neutral">Listo</span>
+                <div class="summary">
+                    <div>
+                        <span>Cliente</span>
+                        <strong id="client">-</strong>
                     </div>
-
-                    <div class="summary">
-                        <div>
-                            <span>Cliente</span>
-                            <strong id="client">-</strong>
-                        </div>
-                        <div>
-                            <span>Total</span>
-                            <strong id="total">-</strong>
-                        </div>
-                        <div>
-                            <span>Estado</span>
-                            <strong id="state">Sin ejecutar</strong>
-                        </div>
+                    <div>
+                        <span>Total</span>
+                        <strong id="total">-</strong>
                     </div>
+                    <div>
+                        <span>Estado</span>
+                        <strong id="state">Sin ejecutar</strong>
+                    </div>
+                </div>
 
+                <div class="result-lists">
+                    <div>
                     <h3>Logs del workflow</h3>
                     <ul id="logs" class="list"></ul>
-
+                    </div>
+                    <div>
                     <h3>Errores</h3>
                     <ul id="errors" class="list errors"></ul>
-                </section>
-            </div>
-
-            <section class="panel token-panel">
-                <div class="panel-title">
-                    <h2>Tokens reconocidos</h2>
-                </div>
-                <div class="table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Tipo</th>
-                                <th>Lexema</th>
-                                <th>Linea</th>
-                                <th>Columna</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tokens"></tbody>
-                    </table>
+                    </div>
                 </div>
             </section>
 
@@ -207,9 +184,6 @@
         </section>
     </main>
 
-    <script>
-        window.DEFAULT_EXAMPLE = {{ example|tojson }};
-    </script>
-    <script src="{{ url_for('static', filename='app.js', v='rules-autoload-v3') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v='pdf-rules-v4') }}"></script>
 </body>
 </html>

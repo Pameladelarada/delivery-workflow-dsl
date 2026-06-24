@@ -105,12 +105,6 @@ button.secondary {
     flex-wrap: wrap;
 }
 
-.editor-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
-    gap: 18px;
-}
-
 .panel {
     background: var(--panel);
     border: 1px solid var(--line);
@@ -153,20 +147,6 @@ button.secondary {
     font-size: 13px;
     line-height: 1.45;
     white-space: pre-wrap;
-}
-
-textarea {
-    width: 100%;
-    min-height: 460px;
-    resize: vertical;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    padding: 14px;
-    font-family: Consolas, "Courier New", monospace;
-    font-size: 14px;
-    line-height: 1.5;
-    color: #0d1720;
-    background: #fbfdff;
 }
 
 .summary {
@@ -235,8 +215,14 @@ textarea {
     color: var(--danger);
 }
 
-.token-panel {
-    margin-top: 18px;
+.overview-panel {
+    margin-bottom: 18px;
+}
+
+.result-lists {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
 }
 
 .analysis-section {
@@ -611,11 +597,11 @@ th {
         flex: 1;
     }
 
-    .editor-grid {
+    .summary {
         grid-template-columns: 1fr;
     }
 
-    .summary {
+    .result-lists {
         grid-template-columns: 1fr;
     }
 

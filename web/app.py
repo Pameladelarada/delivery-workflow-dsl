@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -10,7 +11,8 @@ from xml.etree import ElementTree
 from flask import Flask, jsonify, render_template, request
 
 ROOT = Path(__file__).resolve().parents[1]
-COMPILER = ROOT / "bin" / "delivery_compiler.exe"
+COMPILER_NAME = "delivery_compiler.exe" if os.name == "nt" else "delivery_compiler"
+COMPILER = ROOT / "bin" / COMPILER_NAME
 EXAMPLE = ROOT / "examples" / "pedido_basico.dsl"
 ALLOWED_RULE_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".csv", ".txt"}
 
@@ -192,7 +194,7 @@ def compile_dsl():
                 "order": {},
                 "logs": [],
                 "errors": [
-                    "No se encontro bin/delivery_compiler.exe. Ejecuta primero .\\build.ps1 para compilar el programa C++."
+                    f"No se encontro bin/{COMPILER_NAME}. Compila primero el programa C++."
                 ],
             }
         )

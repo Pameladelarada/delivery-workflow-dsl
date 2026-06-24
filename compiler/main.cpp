@@ -39,12 +39,41 @@ struct Condition {
     std::string left;
     std::string op;
     OrderValue right;
+    int line = 0;
 };
 
 struct Action {
     std::string kind;
     std::string target;
     bool conditional = false;
+    bool executed = true;
+};
+
+struct SyntaxNode {
+    int id = 0;
+    std::string symbol;
+    std::string lexeme;
+    int line = 0;
+    std::vector<SyntaxNode> children;
+};
+
+struct SemanticAttribute {
+    int nodeId = 0;
+    std::string node;
+    std::string lexeme;
+    std::string inheritedScope;
+    std::string inheritedContext;
+    std::string synthesizedType;
+    std::string synthesizedValue;
+    bool valid = true;
+    std::string rule;
+};
+
+struct SymbolEntry {
+    std::string name;
+    std::string type;
+    std::string value;
+    int line = 0;
 };
 
 static std::string tokenTypeName(TokenType type) {
@@ -188,11 +217,19 @@ private:
 
 class Parser {
 public:
-    explicit Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)) {}
+    explicit Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)) {
+        tree_ = makeNode("Programa", "", 1);
+    }
 
     void parse() {
         while (!check(TokenType::End)) {
-            statement(false);
+            if (check(TokenType::RBrace)) {
+                errors_.push_back("Error sintactico: '}' sin bloque de apertura en linea " +
+                                  std::to_string(tokens_[current_].line));
+                advance();
+                continue;
+            }
+            tree_.children.push_back(statement(false, true));
         }
     }
 
@@ -201,45 +238,80 @@ public:
     const std::vector<std::string>& validations() const { return validations_; }
     const std::vector<std::string>& errors() const { return errors_; }
     const std::vector<std::string>& logs() const { return logs_; }
+    const SyntaxNode& tree() const { return tree_; }
+    const std::vector<SemanticAttribute>& attributes() const { return attributes_; }
+    const std::vector<SymbolEntry>& symbols() const { return symbols_; }
+    const std::vector<std::string>& semanticChecks() const { return semanticChecks_; }
 
     void semanticAnalysis() {
         std::set<std::string> allowedValidations = {"stock", "direccion", "pago", "cliente", "producto", "total"};
 
+        symbols_.clear();
+        attributes_.clear();
+        semanticChecks_.clear();
+        for (const auto& item : order_) {
+            symbols_.push_back({item.first, item.second.isNumber ? "numero" : "texto", item.second.raw,
+                                orderLines_.count(item.first) ? orderLines_[item.first] : 0});
+        }
+
         if (order_.empty()) {
             errors_.push_back("Error semantico: el programa debe definir un bloque PEDIDO.");
+            semanticChecks_.push_back("Fallo: no existe un bloque PEDIDO que defina el ambito global.");
+        } else {
+            semanticChecks_.push_back("Correcto: PEDIDO define " + std::to_string(order_.size()) +
+                                      " simbolos en el ambito global.");
         }
 
         for (const std::string& field : validations_) {
             if (!allowedValidations.count(field)) {
                 errors_.push_back("Error semantico: VALIDAR " + field + " no pertenece al dominio permitido.");
+                semanticChecks_.push_back("Fallo: '" + field + "' no pertenece al dominio de VALIDAR.");
                 continue;
             }
             if (!order_.count(field)) {
                 errors_.push_back("Error semantico: no se puede validar '" + field + "' porque no existe en PEDIDO.");
+                semanticChecks_.push_back("Fallo: '" + field + "' no fue declarado en PEDIDO.");
                 continue;
             }
             if (field == "stock" && (!order_[field].isNumber || order_[field].number <= 0)) {
                 errors_.push_back("Error semantico: stock debe ser un numero mayor que cero.");
+                semanticChecks_.push_back("Fallo: stock debe sintetizar un numero mayor que cero.");
+                continue;
             }
             if ((field == "direccion" || field == "pago") && order_[field].raw.empty()) {
                 errors_.push_back("Error semantico: " + field + " no puede estar vacio.");
+                semanticChecks_.push_back("Fallo: '" + field + "' sintetiza un texto vacio.");
+                continue;
             }
+            semanticChecks_.push_back("Correcto: VALIDAR " + field + " resolvio el simbolo y su valor.");
             logs_.push_back("Validacion aprobada: " + field);
         }
 
         for (const Action& action : actions_) {
-            logs_.push_back(action.kind + " -> " + action.target);
+            if (action.executed) logs_.push_back(action.kind + " -> " + action.target);
         }
+
+        annotate(tree_, "global", "activo");
     }
 
 private:
     std::vector<Token> tokens_;
     size_t current_ = 0;
+    int nextNodeId_ = 1;
     std::map<std::string, OrderValue> order_;
+    std::map<std::string, int> orderLines_;
     std::vector<Action> actions_;
     std::vector<std::string> validations_;
     std::vector<std::string> errors_;
     std::vector<std::string> logs_;
+    SyntaxNode tree_;
+    std::vector<SemanticAttribute> attributes_;
+    std::vector<SymbolEntry> symbols_;
+    std::vector<std::string> semanticChecks_;
+
+    SyntaxNode makeNode(const std::string& symbol, const std::string& lexeme, int line) {
+        return {nextNodeId_++, symbol, lexeme, line, {}};
+    }
 
     bool check(TokenType type) const { return tokens_[current_].type == type; }
     bool checkLexeme(const std::string& lexeme) const { return tokens_[current_].lexeme == lexeme; }
@@ -263,26 +335,22 @@ private:
         throw std::runtime_error(message + " cerca de linea " + std::to_string(tokens_[current_].line));
     }
 
-    Token consumeIdentifierLike(const std::string& message) {
-        if (check(TokenType::Identifier) || check(TokenType::Reserved)) return advance();
-        throw std::runtime_error(message + " cerca de linea " + std::to_string(tokens_[current_].line));
-    }
-
     OrderValue consumeValue() {
         if (match(TokenType::String)) return {previous().lexeme, false, 0.0};
         if (match(TokenType::Number)) return {previous().lexeme, true, std::stod(previous().lexeme)};
-        Token id = consumeIdentifierLike("Se esperaba un valor");
+        Token id = consume(TokenType::Identifier, "Se esperaba un valor STRING, NUMBER o IDENTIFIER");
         return {id.lexeme, false, 0.0};
     }
 
-    void statement(bool conditional) {
+    SyntaxNode statement(bool conditional, bool active) {
+        int line = tokens_[current_].line;
         try {
-            if (matchReserved("PEDIDO")) parseOrder();
-            else if (matchReserved("VALIDAR")) parseValidation();
-            else if (matchReserved("SI")) parseIf();
-            else if (matchReserved("ASIGNAR")) parseAction("ASIGNAR", conditional);
-            else if (matchReserved("INICIAR")) parseAction("INICIAR", conditional);
-            else if (matchReserved("FINALIZAR")) parseAction("FINALIZAR", conditional);
+            if (matchReserved("PEDIDO")) return parseOrder(line);
+            if (matchReserved("VALIDAR")) return parseValidation(line);
+            if (matchReserved("SI")) return parseIf(line, active);
+            if (matchReserved("ASIGNAR")) return parseAction("ASIGNAR", conditional, active, line);
+            if (matchReserved("INICIAR")) return parseAction("INICIAR", conditional, active, line);
+            if (matchReserved("FINALIZAR")) return parseAction("FINALIZAR", conditional, active, line);
             else {
                 throw std::runtime_error("Instruccion no reconocida '" + tokens_[current_].lexeme +
                                          "' en linea " + std::to_string(tokens_[current_].line));
@@ -290,35 +358,50 @@ private:
         } catch (const std::exception& ex) {
             errors_.push_back(std::string("Error sintactico: ") + ex.what());
             synchronize();
+            return makeNode("ErrorSintactico", ex.what(), line);
         }
     }
 
-    void parseOrder() {
+    SyntaxNode parseOrder(int line) {
+        SyntaxNode node = makeNode("Pedido", "PEDIDO", line);
         consume(TokenType::LBrace, "Se esperaba '{' despues de PEDIDO");
         while (!check(TokenType::RBrace) && !check(TokenType::End)) {
-            Token key = consumeIdentifierLike("Se esperaba el nombre de una propiedad del pedido");
+            Token key = consume(TokenType::Identifier, "Se esperaba el nombre de una propiedad del pedido");
             consume(TokenType::Colon, "Se esperaba ':' despues de la propiedad '" + key.lexeme + "'");
             OrderValue value = consumeValue();
             order_[key.lexeme] = value;
+            orderLines_[key.lexeme] = key.line;
+
+            SyntaxNode property = makeNode("Propiedad", key.lexeme, key.line);
+            property.children.push_back(makeNode(value.isNumber ? "Numero" : "Texto", value.raw, key.line));
+            node.children.push_back(std::move(property));
         }
         consume(TokenType::RBrace, "Se esperaba '}' para cerrar PEDIDO");
         logs_.push_back("Pedido registrado");
+        return node;
     }
 
-    void parseValidation() {
-        Token field = consumeIdentifierLike("Se esperaba el campo a validar");
+    SyntaxNode parseValidation(int line) {
+        Token field = consume(TokenType::Identifier, "Se esperaba el campo a validar");
         validations_.push_back(field.lexeme);
+        SyntaxNode node = makeNode("Validacion", "VALIDAR", line);
+        node.children.push_back(makeNode("Identificador", field.lexeme, field.line));
+        return node;
     }
 
-    void parseAction(const std::string& kind, bool conditional) {
-        Token target = consumeIdentifierLike("Se esperaba el objetivo de la accion " + kind);
-        actions_.push_back({kind, target.lexeme, conditional});
+    SyntaxNode parseAction(const std::string& kind, bool conditional, bool active, int line) {
+        Token target = consume(TokenType::Identifier, "Se esperaba el objetivo de la accion " + kind);
+        actions_.push_back({kind, target.lexeme, conditional, active});
+        SyntaxNode node = makeNode("Accion", kind, line);
+        node.children.push_back(makeNode("Objetivo", target.lexeme, target.line));
+        return node;
     }
 
-    void parseIf() {
+    SyntaxNode parseIf(int line, bool parentActive) {
         Condition condition;
-        Token left = consumeIdentifierLike("Se esperaba variable en condicion SI");
+        Token left = consume(TokenType::Identifier, "Se esperaba variable en condicion SI");
         condition.left = left.lexeme;
+        condition.line = left.line;
         Token op = consume(TokenType::Operator, "Se esperaba operador en condicion SI");
         condition.op = op.lexeme;
         condition.right = consumeValue();
@@ -328,11 +411,21 @@ private:
         logs_.push_back("Condicion SI " + condition.left + " " + condition.op + " " + condition.right.raw +
                         (result ? " aprobada" : " no aprobada"));
 
+        SyntaxNode node = makeNode("Condicional", "SI", line);
+        SyntaxNode conditionNode = makeNode("Condicion", condition.op, line);
+        conditionNode.children.push_back(makeNode("Identificador", condition.left, left.line));
+        conditionNode.children.push_back(makeNode("Operador", condition.op, op.line));
+        conditionNode.children.push_back(makeNode(condition.right.isNumber ? "Numero" : "Texto",
+                                                  condition.right.raw, op.line));
+        node.children.push_back(std::move(conditionNode));
+        SyntaxNode block = makeNode("Bloque", result ? "verdadero" : "falso", line);
+
         while (!check(TokenType::RBrace) && !check(TokenType::End)) {
-            if (result) statement(true);
-            else skipStatement();
+            block.children.push_back(statement(true, parentActive && result));
         }
         consume(TokenType::RBrace, "Se esperaba '}' para cerrar SI");
+        node.children.push_back(std::move(block));
+        return node;
     }
 
     bool evaluate(const Condition& condition) {
@@ -355,31 +448,74 @@ private:
         return false;
     }
 
-    void skipStatement() {
-        if (matchReserved("SI")) {
-            while (!check(TokenType::LBrace) && !check(TokenType::End)) advance();
-            if (match(TokenType::LBrace)) {
-                int depth = 1;
-                while (depth > 0 && !check(TokenType::End)) {
-                    if (match(TokenType::LBrace)) depth++;
-                    else if (match(TokenType::RBrace)) depth--;
-                    else advance();
-                }
-            }
-            return;
-        }
-        while (!check(TokenType::Reserved) && !check(TokenType::RBrace) && !check(TokenType::End)) advance();
-        if (check(TokenType::Reserved)) {
-            advance();
-            while (!check(TokenType::Reserved) && !check(TokenType::RBrace) && !check(TokenType::End)) advance();
-        }
-    }
-
     void synchronize() {
         while (!check(TokenType::End)) {
             if (check(TokenType::Reserved) || check(TokenType::RBrace)) return;
             advance();
         }
+    }
+
+    SemanticAttribute annotate(const SyntaxNode& node, const std::string& scope,
+                               const std::string& context) {
+        std::string childScope = scope;
+        std::string childContext = context;
+        if (node.symbol == "Pedido") childScope = "global/PEDIDO";
+        if (node.symbol == "Bloque") childContext = node.lexeme == "verdadero" ? "activo" : "inactivo";
+
+        std::vector<SemanticAttribute> childAttributes;
+        for (const SyntaxNode& child : node.children) {
+            childAttributes.push_back(annotate(child, childScope, childContext));
+        }
+
+        SemanticAttribute attribute;
+        attribute.nodeId = node.id;
+        attribute.node = node.symbol;
+        attribute.lexeme = node.lexeme;
+        attribute.inheritedScope = scope;
+        attribute.inheritedContext = context;
+        attribute.synthesizedType = "estructura";
+        attribute.synthesizedValue = std::to_string(node.children.size()) + " hijo(s)";
+        attribute.rule = "La validez se sintetiza desde sus hijos.";
+
+        for (const SemanticAttribute& child : childAttributes) attribute.valid = attribute.valid && child.valid;
+
+        if (node.symbol == "Numero") {
+            attribute.synthesizedType = "numero";
+            attribute.synthesizedValue = node.lexeme;
+            attribute.rule = "NUMBER.tipo := numero; NUMBER.valor := lexema";
+        } else if (node.symbol == "Texto") {
+            attribute.synthesizedType = "texto";
+            attribute.synthesizedValue = node.lexeme;
+            attribute.rule = "valor.tipo y valor.valor se sintetizan desde el terminal.";
+        } else if (node.symbol == "Identificador") {
+            auto found = order_.find(node.lexeme);
+            attribute.valid = found != order_.end();
+            attribute.synthesizedType = attribute.valid ? (found->second.isNumber ? "numero" : "texto") : "no definido";
+            attribute.synthesizedValue = attribute.valid ? found->second.raw : "sin valor";
+            attribute.rule = "IDENTIFICADOR usa el ambito heredado para resolver su simbolo.";
+        } else if (node.symbol == "Propiedad" && !childAttributes.empty()) {
+            attribute.synthesizedType = childAttributes[0].synthesizedType;
+            attribute.synthesizedValue = childAttributes[0].synthesizedValue;
+            attribute.rule = "propiedad.tipo/valor := valor.tipo/valor";
+        } else if (node.symbol == "Condicion" && childAttributes.size() == 3) {
+            attribute.synthesizedType = "booleano";
+            attribute.synthesizedValue = childAttributes[0].synthesizedValue + " " + node.lexeme + " " +
+                                         childAttributes[2].synthesizedValue;
+            attribute.valid = childAttributes[0].valid &&
+                              childAttributes[0].synthesizedType == childAttributes[2].synthesizedType;
+            attribute.rule = "condicion.valida := tipos compatibles; resultado := comparar valores.";
+        } else if (node.symbol == "Bloque") {
+            attribute.synthesizedType = "secuencia";
+            attribute.synthesizedValue = node.lexeme;
+            attribute.rule = "El contexto de ejecucion se hereda a cada sentencia del bloque.";
+        } else if (node.symbol == "ErrorSintactico") {
+            attribute.valid = false;
+            attribute.synthesizedType = "error";
+            attribute.synthesizedValue = node.lexeme;
+        }
+
+        attributes_.push_back(attribute);
+        return attribute;
     }
 };
 
@@ -389,6 +525,21 @@ static std::string readFile(const std::string& path) {
     std::ostringstream buffer;
     buffer << in.rdbuf();
     return buffer.str();
+}
+
+static void printSyntaxNode(const SyntaxNode& node, int indent) {
+    std::string padding(static_cast<size_t>(indent), ' ');
+    std::cout << padding << "{\"id\": " << node.id
+              << ", \"symbol\": \"" << jsonEscape(node.symbol)
+              << "\", \"lexeme\": \"" << jsonEscape(node.lexeme)
+              << "\", \"line\": " << node.line << ", \"children\": [";
+    if (!node.children.empty()) std::cout << "\n";
+    for (size_t i = 0; i < node.children.size(); ++i) {
+        printSyntaxNode(node.children[i], indent + 2);
+        std::cout << (i + 1 < node.children.size() ? ",\n" : "\n");
+    }
+    if (!node.children.empty()) std::cout << padding;
+    std::cout << "]}";
 }
 
 static void printJson(const std::vector<Token>& tokens, const Parser& parser) {
@@ -416,6 +567,47 @@ static void printJson(const std::vector<Token>& tokens, const Parser& parser) {
         else std::cout << "\"" << jsonEscape(item.second.raw) << "\"";
     }
     std::cout << "},\n";
+
+    std::cout << "  \"syntax\": {\n";
+    std::cout << "    \"parser\": \"descendente recursivo LL(1)\",\n";
+    std::cout << "    \"tree\": ";
+    printSyntaxNode(parser.tree(), 4);
+    std::cout << "\n  },\n";
+
+    std::cout << "  \"semantic\": {\n";
+    std::cout << "    \"symbols\": [";
+    for (size_t i = 0; i < parser.symbols().size(); ++i) {
+        const SymbolEntry& symbol = parser.symbols()[i];
+        std::cout << (i ? ", " : "")
+                  << "{\"name\": \"" << jsonEscape(symbol.name)
+                  << "\", \"type\": \"" << jsonEscape(symbol.type)
+                  << "\", \"value\": \"" << jsonEscape(symbol.value)
+                  << "\", \"line\": " << symbol.line << "}";
+    }
+    std::cout << "],\n";
+
+    std::cout << "    \"attributes\": [\n";
+    for (size_t i = 0; i < parser.attributes().size(); ++i) {
+        const SemanticAttribute& attribute = parser.attributes()[i];
+        std::cout << "      {\"node_id\": " << attribute.nodeId
+                  << ", \"node\": \"" << jsonEscape(attribute.node)
+                  << "\", \"lexeme\": \"" << jsonEscape(attribute.lexeme)
+                  << "\", \"inherited\": {\"scope\": \"" << jsonEscape(attribute.inheritedScope)
+                  << "\", \"context\": \"" << jsonEscape(attribute.inheritedContext)
+                  << "\"}, \"synthesized\": {\"type\": \"" << jsonEscape(attribute.synthesizedType)
+                  << "\", \"value\": \"" << jsonEscape(attribute.synthesizedValue)
+                  << "\", \"valid\": " << (attribute.valid ? "true" : "false")
+                  << "}, \"rule\": \"" << jsonEscape(attribute.rule) << "\"}";
+        std::cout << (i + 1 < parser.attributes().size() ? ",\n" : "\n");
+    }
+    std::cout << "    ],\n";
+
+    std::cout << "    \"checks\": [";
+    for (size_t i = 0; i < parser.semanticChecks().size(); ++i) {
+        std::cout << (i ? ", " : "") << "\"" << jsonEscape(parser.semanticChecks()[i]) << "\"";
+    }
+    std::cout << "]\n";
+    std::cout << "  },\n";
 
     std::cout << "  \"logs\": [";
     for (size_t i = 0; i < parser.logs().size(); ++i) {
@@ -451,6 +643,8 @@ int main(int argc, char* argv[]) {
         std::cout << "  \"success\": false,\n";
         std::cout << "  \"tokens\": [],\n";
         std::cout << "  \"order\": {},\n";
+        std::cout << "  \"syntax\": {\"parser\": \"descendente recursivo LL(1)\", \"tree\": null},\n";
+        std::cout << "  \"semantic\": {\"symbols\": [], \"attributes\": [], \"checks\": []},\n";
         std::cout << "  \"logs\": [],\n";
         std::cout << "  \"errors\": [\"" << jsonEscape(ex.what()) << "\"]\n";
         std::cout << "}\n";

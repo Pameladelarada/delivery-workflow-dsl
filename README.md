@@ -8,7 +8,6 @@ Proyecto academico-practico que combina compiladores, lenguajes DSL y automatiza
 - `web/`: aplicacion Flask para escribir y ejecutar workflows desde el navegador.
 - `examples/`: programas DSL de prueba.
 - `docs/`: especificacion tecnica del proyecto.
-- `Guia_instalacion_flask_y_uso_web.docx`: guia Word para instalar Flask y ver la pagina web.
 - `run_web.ps1`: script recomendado para preparar dependencias, compilar y abrir la web.
 
 ## Ejecucion rapida
@@ -79,4 +78,16 @@ INICIAR entrega
 FINALIZAR pedido
 ```
 
-El compilador valida el codigo, genera logs del workflow y produce una salida JSON.
+El compilador valida el codigo, genera logs del workflow y produce una salida JSON. La interfaz tambien presenta:
+
+- la secuencia visual del analisis formal (fuente, lexemas, tokens, ER, AFND y AFD);
+- la gramatica libre de contexto y el arbol sintactico abstracto;
+- la tabla de simbolos y los atributos semanticos heredados y sintetizados.
+
+## Pruebas
+
+Despues de compilar, ejecuta:
+
+```powershell
+python -m unittest discover -s tests -v
+```

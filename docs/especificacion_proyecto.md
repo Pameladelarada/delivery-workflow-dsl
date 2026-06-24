@@ -85,11 +85,30 @@ Lee caracteres y produce tokens: palabras reservadas, identificadores, numeros, 
 
 ### Analizador sintactico
 
-Comprueba que el programa cumpla la gramatica del DSL. Por ejemplo, `PEDIDO` debe tener un bloque con propiedades y `SI` debe tener una condicion seguida de un bloque.
+Usa un parser descendente recursivo LL(1), comprueba que el programa cumpla la gramatica del DSL y construye un arbol sintactico abstracto (AST). El arbol se incluye en `syntax.tree` aunque una rama condicional no se ejecute, porque reconocer la estructura y ejecutar el workflow son fases independientes.
+
+Gramatica libre de contexto:
+
+```text
+<programa>    -> <sentencia>*
+<sentencia>   -> <pedido> | <validacion> | <condicional> | <accion>
+<pedido>      -> PEDIDO { <propiedad>* }
+<propiedad>   -> IDENTIFIER : <valor>
+<valor>       -> STRING | NUMBER | IDENTIFIER
+<validacion>  -> VALIDAR IDENTIFIER
+<condicional> -> SI <condicion> { <sentencia>* }
+<condicion>   -> IDENTIFIER OPERATOR <valor>
+<accion>      -> (ASIGNAR | INICIAR | FINALIZAR) IDENTIFIER
+```
 
 ### Analizador semantico
 
-Valida reglas de negocio:
+La evaluacion semantica recorre el AST y expone una tabla de simbolos y atributos por nodo:
+
+- Atributos heredados (recorrido descendente): ambito visible y contexto de ejecucion.
+- Atributos sintetizados (recorrido ascendente): tipo, valor y validez calculados desde los hijos.
+
+Ademas valida reglas de negocio:
 
 - No se puede validar un campo que no existe.
 - No se puede usar una variable inexistente en una condicion.
@@ -104,6 +123,8 @@ El compilador devuelve un JSON con:
 - `success`: indica si el programa es valido.
 - `tokens`: lista de tokens reconocidos.
 - `order`: datos del pedido.
+- `syntax`: estrategia del parser y AST visualizable.
+- `semantic`: tabla de simbolos, atributos heredados/sintetizados y comprobaciones.
 - `logs`: pasos ejecutados del workflow.
 - `errors`: errores lexicos, sintacticos o semanticos.
 

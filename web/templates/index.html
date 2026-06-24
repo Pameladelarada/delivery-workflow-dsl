@@ -91,8 +91,23 @@
 
             <section class="analysis-section">
                 <div class="section-heading">
-                    <p class="eyebrow">Imagen -> Lexemas -> Tokens -> ER -> AFND -> AFD</p>
-                    <h2>Analisis formal del lenguaje</h2>
+                    <p class="eyebrow">Del código fuente al autómata determinista</p>
+                    <h2>Análisis formal del lenguaje</h2>
+                    <p class="section-description">Cada etapa transforma la salida de la anterior. Sigue las flechas para leer la secuencia completa.</p>
+                </div>
+
+                <div class="formal-flow" aria-label="Secuencia del análisis formal">
+                    <div class="flow-step"><span>01</span><strong>Fuente DSL</strong><small>Caracteres de entrada</small></div>
+                    <div class="flow-arrow" aria-hidden="true">→</div>
+                    <div class="flow-step"><span>02</span><strong>Lexemas</strong><small>Fragmentos reconocibles</small></div>
+                    <div class="flow-arrow" aria-hidden="true">→</div>
+                    <div class="flow-step"><span>03</span><strong>Tokens</strong><small>Categorías léxicas</small></div>
+                    <div class="flow-arrow" aria-hidden="true">→</div>
+                    <div class="flow-step"><span>04</span><strong>ER</strong><small>Patrones formales</small></div>
+                    <div class="flow-arrow" aria-hidden="true">→</div>
+                    <div class="flow-step"><span>05</span><strong>AFND</strong><small>Autómata intermedio</small></div>
+                    <div class="flow-arrow" aria-hidden="true">→</div>
+                    <div class="flow-step"><span>06</span><strong>AFD</strong><small>Reconocedor ejecutable</small></div>
                 </div>
 
                 <div class="analysis-grid">
@@ -138,12 +153,77 @@
                     </article>
                 </div>
             </section>
+
+            <section class="analysis-section syntax-section">
+                <div class="section-heading">
+                    <p class="eyebrow">Tokens → producciones → árbol</p>
+                    <h2>Análisis sintáctico</h2>
+                    <p class="section-description">La gramática libre de contexto define las combinaciones válidas; el parser descendente recursivo construye el árbol del programa analizado.</p>
+                </div>
+
+                <div class="analysis-grid syntax-grid">
+                    <article class="analysis-card grammar-card">
+                        <div class="card-heading">
+                            <div><span class="card-kicker">GLC</span><h3>Gramática del DSL</h3></div>
+                            <span id="parserType" class="method-badge">LL(1)</span>
+                        </div>
+                        <div id="grammarRules" class="grammar-rules"></div>
+                    </article>
+
+                    <article class="analysis-card tree-card wide-card">
+                        <div class="card-heading">
+                            <div><span class="card-kicker">AST</span><h3>Árbol sintáctico visual</h3></div>
+                            <span class="legend"><i></i> Nodo no terminal</span>
+                        </div>
+                        <div id="syntaxTree" class="syntax-tree" aria-live="polite"></div>
+                    </article>
+                </div>
+            </section>
+
+            <section class="analysis-section semantic-section">
+                <div class="section-heading">
+                    <p class="eyebrow">Ámbito ↓ · tipo, valor y validez ↑</p>
+                    <h2>Análisis semántico dirigido por atributos</h2>
+                    <p class="section-description">Los atributos heredados descienden desde el padre; los sintetizados ascienden desde los hijos. Así se resuelven símbolos, tipos y reglas del workflow.</p>
+                </div>
+
+                <div class="attribute-flow">
+                    <div><span class="direction down">↓</span><strong>Heredados</strong><small>ámbito y contexto de ejecución</small></div>
+                    <div class="attribute-node">Nodo AST</div>
+                    <div><span class="direction up">↑</span><strong>Sintetizados</strong><small>tipo, valor y validez</small></div>
+                </div>
+
+                <div class="analysis-grid semantic-grid">
+                    <article class="analysis-card">
+                        <h3>Tabla de símbolos</h3>
+                        <div class="table-wrap compact-table">
+                            <table>
+                                <thead><tr><th>Nombre</th><th>Tipo</th><th>Valor</th><th>Línea</th></tr></thead>
+                                <tbody id="symbolTable"></tbody>
+                            </table>
+                        </div>
+                    </article>
+                    <article class="analysis-card">
+                        <h3>Comprobaciones semánticas</h3>
+                        <ul id="semanticChecks" class="check-list"></ul>
+                    </article>
+                    <article class="analysis-card wide-card">
+                        <h3>Atributos evaluados por nodo</h3>
+                        <div class="table-wrap attribute-table">
+                            <table>
+                                <thead><tr><th>Nodo</th><th>Heredado ↓</th><th>Sintetizado ↑</th><th>Regla aplicada</th></tr></thead>
+                                <tbody id="semanticAttributes"></tbody>
+                            </table>
+                        </div>
+                    </article>
+                </div>
+            </section>
         </section>
     </main>
 
     <script>
         window.DEFAULT_EXAMPLE = {{ example|tojson }};
     </script>
-    <script src="{{ url_for('static', filename='app.js', v='tokens-grouped') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v='syntax-semantic-v1') }}"></script>
 </body>
 </html>

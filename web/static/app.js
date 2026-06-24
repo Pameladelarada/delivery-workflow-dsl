@@ -20,7 +20,25 @@ const regexDefinitions = document.querySelector("#regexDefinitions");
 const nfaDefinitions = document.querySelector("#nfaDefinitions");
 const dfaDefinitions = document.querySelector("#dfaDefinitions");
 const transitionTables = document.querySelector("#transitionTables");
+const parserType = document.querySelector("#parserType");
+const grammarRules = document.querySelector("#grammarRules");
+const syntaxTree = document.querySelector("#syntaxTree");
+const symbolTable = document.querySelector("#symbolTable");
+const semanticChecks = document.querySelector("#semanticChecks");
+const semanticAttributes = document.querySelector("#semanticAttributes");
 let uploadedDslDraft = "";
+
+const GRAMMAR = [
+    ["programa", "sentencia*"],
+    ["sentencia", "pedido | validación | condicional | acción"],
+    ["pedido", "PEDIDO { propiedad* }"],
+    ["propiedad", "IDENTIFIER : valor"],
+    ["valor", "STRING | NUMBER | IDENTIFIER"],
+    ["validación", "VALIDAR IDENTIFIER"],
+    ["condicional", "SI condición { sentencia* }"],
+    ["condición", "IDENTIFIER OPERATOR valor"],
+    ["acción", "(ASIGNAR | INICIAR | FINALIZAR) IDENTIFIER"],
+];
 
 const TOKEN_DEFINITIONS = [
     {type: "RESERVED", description: "Palabra reservada del DSL que activa una instruccion del workflow.", example: "PEDIDO, VALIDAR, SI"},
@@ -75,6 +93,16 @@ const AUTOMATA = [
     },
 ];
 
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "'": "&#39;",
+        '"': "&quot;",
+    })[character]);
+}
+
 function setStatus(success) {
     statusBadge.className = `status ${success ? "ok" : "bad"}`;
     statusBadge.textContent = success ? "Valido" : "Con errores";
@@ -119,8 +147,8 @@ function renderTokens(items) {
             group.forEach((token, index) => {
                 const row = document.createElement("tr");
                 row.innerHTML = `
-                    <td>${firstTypeRow ? type : ""}</td>
-                    <td>${index === 0 ? token.lexeme : ""}</td>
+                    <td>${escapeHtml(firstTypeRow ? type : "")}</td>
+                    <td>${escapeHtml(index === 0 ? token.lexeme : "")}</td>
                     <td>${token.line}</td>
                     <td>${token.column}</td>
                 `;
@@ -144,7 +172,7 @@ function renderAnalysis(items) {
     lexemeGroups.innerHTML = tokensByType.map((group) => `
         <div class="mini-block">
             <strong>${group.type}</strong>
-            <p>${group.lexemes.length ? group.lexemes.join(", ") : "Sin lexemas detectados aun."}</p>
+            <p>${group.lexemes.length ? group.lexemes.map(escapeHtml).join(", ") : "Sin lexemas detectados aún."}</p>
         </div>
     `).join("");
 
@@ -195,6 +223,87 @@ function renderAnalysis(items) {
     `).join("");
 }
 
+function renderGrammar(parserName = "descendente recursivo LL(1)") {
+    parserType.textContent = parserName;
+    grammarRules.innerHTML = GRAMMAR.map(([left, right]) => `
+        <div class="grammar-rule">
+            <code>&lt;${escapeHtml(left)}&gt;</code>
+            <span>→</span>
+            <code>${escapeHtml(right)}</code>
+        </div>
+    `).join("");
+}
+
+function buildTreeNode(node) {
+    const item = document.createElement("li");
+    const box = document.createElement("div");
+    box.className = `tree-node ${node.children?.length ? "non-terminal" : "terminal"}`;
+    box.dataset.nodeId = node.id;
+
+    const symbol = document.createElement("strong");
+    symbol.textContent = node.symbol;
+    box.appendChild(symbol);
+    if (node.lexeme) {
+        const lexeme = document.createElement("span");
+        lexeme.textContent = node.lexeme;
+        box.appendChild(lexeme);
+    }
+    if (node.line) {
+        const line = document.createElement("small");
+        line.textContent = `línea ${node.line}`;
+        box.appendChild(line);
+    }
+    item.appendChild(box);
+
+    if (node.children?.length) {
+        const children = document.createElement("ul");
+        node.children.forEach((child) => children.appendChild(buildTreeNode(child)));
+        item.appendChild(children);
+    }
+    return item;
+}
+
+function renderSyntax(syntax) {
+    renderGrammar(syntax?.parser || "descendente recursivo LL(1)");
+    syntaxTree.innerHTML = "";
+    if (!syntax?.tree) {
+        syntaxTree.innerHTML = '<p class="empty-state">Ejecuta el workflow para construir el árbol.</p>';
+        return;
+    }
+    const root = document.createElement("ul");
+    root.className = "tree-root";
+    root.appendChild(buildTreeNode(syntax.tree));
+    syntaxTree.appendChild(root);
+}
+
+function renderSemantic(semantic) {
+    const symbols = semantic?.symbols || [];
+    symbolTable.innerHTML = symbols.length ? symbols.map((symbol) => `
+        <tr>
+            <td><code>${escapeHtml(symbol.name)}</code></td>
+            <td><span class="type-pill">${escapeHtml(symbol.type)}</span></td>
+            <td>${escapeHtml(symbol.value)}</td>
+            <td>${symbol.line || "-"}</td>
+        </tr>
+    `).join("") : '<tr><td colspan="4">Sin símbolos declarados.</td></tr>';
+
+    const checks = semantic?.checks || [];
+    semanticChecks.innerHTML = checks.length ? checks.map((check) => {
+        const failed = check.startsWith("Fallo:");
+        return `<li class="${failed ? "failed" : "passed"}"><span>${failed ? "×" : "✓"}</span>${escapeHtml(check)}</li>`;
+    }).join("") : '<li class="empty-check">Ejecuta el workflow para evaluar sus reglas.</li>';
+
+    const attributes = semantic?.attributes || [];
+    semanticAttributes.innerHTML = attributes.length ? attributes.map((attribute) => `
+        <tr data-valid="${attribute.synthesized.valid}">
+            <td><strong>${escapeHtml(attribute.node)}</strong>${attribute.lexeme ? `<small>${escapeHtml(attribute.lexeme)}</small>` : ""}</td>
+            <td><span>ámbito: <b>${escapeHtml(attribute.inherited.scope)}</b></span><span>contexto: <b>${escapeHtml(attribute.inherited.context)}</b></span></td>
+            <td><span>tipo: <b>${escapeHtml(attribute.synthesized.type)}</b></span><span>valor: <b>${escapeHtml(attribute.synthesized.value)}</b></span><span class="validity">${attribute.synthesized.valid ? "válido" : "inválido"}</span></td>
+            <td>${escapeHtml(attribute.rule)}</td>
+        </tr>
+    `).join("") : '<tr><td colspan="4">Sin atributos evaluados.</td></tr>';
+}
+
 async function compile() {
     runButton.disabled = true;
     runButton.textContent = "Ejecutando...";
@@ -213,6 +322,8 @@ async function compile() {
         renderList(errors, result.errors, "Sin errores.");
         renderTokens(result.tokens);
         renderAnalysis(result.tokens);
+        renderSyntax(result.syntax);
+        renderSemantic(result.semantic);
     } catch (error) {
         setStatus(false);
         renderList(errors, [error.message], "Error inesperado.");
@@ -273,3 +384,5 @@ useRulesButton.addEventListener("click", () => {
 
 renderTokens([]);
 renderAnalysis([]);
+renderSyntax(null);
+renderSemantic(null);

@@ -64,29 +64,21 @@ const REGEX_DEFINITIONS = [
 const AUTOMATA = [
     {
         type: "IDENTIFIER",
-        nfa: "q0 --letra/_--> q1; q1 --letra/digito/_--> q1; q1 es final.",
-        dfa: "D0 espera letra o _; D1 consume letras, digitos o _ hasta encontrar separador.",
         headers: ["Estado", "letra/_", "digito", "otro"],
         rows: [["D0", "D1", "-", "-"], ["D1", "D1", "D1", "Finalizar token"]],
     },
     {
         type: "NUMBER",
-        nfa: "q0 --digito--> q1; q1 --digito--> q1; q1 --'.'--> q2; q2 --digito--> q3; q3 --digito--> q3.",
-        dfa: "D0 inicia numero; D1 acepta entero; D2 espera decimal; D3 acepta decimal.",
         headers: ["Estado", "digito", ".", "otro"],
         rows: [["D0", "D1", "-", "-"], ["D1", "D1", "D2", "Finalizar token"], ["D2", "D3", "-", "Error"], ["D3", "D3", "-", "Finalizar token"]],
     },
     {
         type: "STRING",
-        nfa: "q0 --comilla--> q1; q1 --caracter distinto de comilla--> q1; q1 --comilla--> q2.",
-        dfa: "D0 espera apertura; D1 acumula contenido; D2 acepta cadena.",
         headers: ["Estado", "comilla", "caracter", "fin"],
         rows: [["D0", "D1", "-", "-"], ["D1", "D2", "D1", "Error"], ["D2", "Final", "-", "-"]],
     },
     {
         type: "OPERATOR",
-        nfa: "q0 -->,<,=,!--> q1; q1 --=--> q2 opcional.",
-        dfa: "D0 espera operador inicial; D1 acepta operador simple; D2 acepta operador compuesto.",
         headers: ["Estado", ">/< / = / !", "=", "otro"],
         rows: [["D0", "D1", "-", "-"], ["D1", "-", "D2", "Finalizar token"], ["D2", "-", "-", "Finalizar token"]],
     },
@@ -122,6 +114,147 @@ function uniqueLexemes(items, type) {
     return [...new Set((items || []).filter((token) => token.type === type).map((token) => token.lexeme))];
 }
 
+function automatonGraph(type, mode) {
+    const prefix = mode === "nfa" ? "q" : "D";
+    const state = (id, x, final = false) => ({id, label: `${prefix}${id}`, x, y: 92, final});
+    const graphs = {
+        IDENTIFIER: {
+            width: 430,
+            states: [state(0, 90), state(1, 320, true)],
+            edges: [
+                {from: 0, to: 1, label: "letra / _"},
+                {from: 1, to: 1, label: "letra / dígito / _", loop: true},
+            ],
+        },
+        NUMBER: {
+            width: 590,
+            states: [state(0, 65), state(1, 210, true), state(2, 355), state(3, 520, true)],
+            edges: [
+                {from: 0, to: 1, label: "dígito"},
+                {from: 1, to: 1, label: "dígito", loop: true},
+                {from: 1, to: 2, label: "."},
+                {from: 2, to: 3, label: "dígito"},
+                {from: 3, to: 3, label: "dígito", loop: true},
+            ],
+        },
+        STRING: {
+            width: 520,
+            states: [state(0, 70), state(1, 260), state(2, 450, true)],
+            edges: [
+                {from: 0, to: 1, label: "comilla"},
+                {from: 1, to: 1, label: "otro carácter", loop: true},
+                {from: 1, to: 2, label: "comilla"},
+            ],
+        },
+        OPERATOR: {
+            width: 520,
+            states: [state(0, 70), state(1, 260, true), state(2, 450, true)],
+            edges: [
+                {from: 0, to: 1, label: ">, <, =, !"},
+                {from: 1, to: 2, label: "="},
+            ],
+        },
+    };
+    return graphs[type];
+}
+
+function createAutomatonSvg(type, mode, index) {
+    const graph = automatonGraph(type, mode);
+    const markerId = `automaton-arrow-${mode}-${index}`;
+    const svg = svgElement("svg", {
+        class: "automaton-svg",
+        viewBox: `0 0 ${graph.width} 190`,
+        role: "img",
+        "aria-label": `${mode === "nfa" ? "AFND" : "AFD"} para ${type}`,
+    });
+    const defs = svgElement("defs");
+    const marker = svgElement("marker", {
+        id: markerId,
+        markerWidth: 8,
+        markerHeight: 8,
+        refX: 7,
+        refY: 4,
+        orient: "auto",
+    });
+    marker.appendChild(svgElement("path", {d: "M0,0 L8,4 L0,8 Z", class: "automaton-arrowhead"}));
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    const states = new Map(graph.states.map((item) => [item.id, item]));
+    const radius = 29;
+    const initial = graph.states[0];
+    svg.appendChild(svgElement("line", {
+        x1: initial.x - 72,
+        y1: initial.y,
+        x2: initial.x - radius - 3,
+        y2: initial.y,
+        class: "automaton-edge",
+        "marker-end": `url(#${markerId})`,
+    }));
+
+    graph.edges.forEach((edge) => {
+        const from = states.get(edge.from);
+        const to = states.get(edge.to);
+        if (edge.loop) {
+            svg.appendChild(svgElement("path", {
+                d: `M ${from.x - 13} ${from.y - 26} C ${from.x - 55} ${from.y - 82}, ${from.x + 55} ${from.y - 82}, ${from.x + 13} ${from.y - 26}`,
+                class: "automaton-edge",
+                fill: "none",
+                "marker-end": `url(#${markerId})`,
+            }));
+            const label = svgElement("text", {x: from.x, y: from.y - 70, class: "automaton-label"});
+            label.textContent = edge.label;
+            svg.appendChild(label);
+            return;
+        }
+
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const distance = Math.hypot(dx, dy);
+        const ux = dx / distance;
+        const uy = dy / distance;
+        svg.appendChild(svgElement("line", {
+            x1: from.x + ux * radius,
+            y1: from.y + uy * radius,
+            x2: to.x - ux * (radius + 4),
+            y2: to.y - uy * (radius + 4),
+            class: "automaton-edge",
+            "marker-end": `url(#${markerId})`,
+        }));
+        const label = svgElement("text", {
+            x: (from.x + to.x) / 2,
+            y: (from.y + to.y) / 2 - 10,
+            class: "automaton-label",
+        });
+        label.textContent = edge.label;
+        svg.appendChild(label);
+    });
+
+    graph.states.forEach((item) => {
+        const group = svgElement("g", {class: "automaton-state"});
+        group.appendChild(svgElement("circle", {cx: item.x, cy: item.y, r: radius}));
+        if (item.final) group.appendChild(svgElement("circle", {cx: item.x, cy: item.y, r: radius - 5}));
+        const label = svgElement("text", {x: item.x, y: item.y + 1});
+        label.textContent = item.label;
+        group.appendChild(label);
+        svg.appendChild(group);
+    });
+    return svg;
+}
+
+function renderAutomata(container, mode) {
+    container.innerHTML = "";
+    AUTOMATA.forEach((item, index) => {
+        const block = document.createElement("div");
+        block.className = "automaton-block";
+        const title = document.createElement("strong");
+        title.textContent = `${mode === "nfa" ? "AFND" : "AFD"} ${item.type}`;
+        block.appendChild(title);
+        block.appendChild(createAutomatonSvg(item.type, mode, index));
+        container.appendChild(block);
+    });
+}
+
 function renderAnalysis(items) {
     const tokensByType = TOKEN_DEFINITIONS.map((definition) => ({
         ...definition,
@@ -151,19 +284,8 @@ function renderAnalysis(items) {
         </div>
     `).join("");
 
-    nfaDefinitions.innerHTML = AUTOMATA.map((item) => `
-        <div class="mini-block">
-            <strong>AFND ${item.type}</strong>
-            <p>${item.nfa}</p>
-        </div>
-    `).join("");
-
-    dfaDefinitions.innerHTML = AUTOMATA.map((item) => `
-        <div class="mini-block">
-            <strong>AFD ${item.type}</strong>
-            <p>${item.dfa}</p>
-        </div>
-    `).join("");
+    renderAutomata(nfaDefinitions, "nfa");
+    renderAutomata(dfaDefinitions, "dfa");
 
     transitionTables.innerHTML = AUTOMATA.map((item) => `
         <div class="transition-block">

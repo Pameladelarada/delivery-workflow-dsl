@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>DSL Delivery Workflow Compiler</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='analysis-ui-v4') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='automata-ui-v5') }}">
 </head>
 <body>
     <main class="app-shell">
@@ -66,9 +66,8 @@
                 </div>
             </section>
 
-            <section class="analysis-section">
+            <section class="analysis-section lexical-section">
                 <div class="section-heading">
-                    <p class="eyebrow">Primera etapa del compilador</p>
                     <h2>Análisis léxico</h2>
                     <p class="section-description">El código fuente se separa en lexemas y se clasifica en tokens mediante expresiones regulares y autómatas.</p>
                 </div>
@@ -102,12 +101,12 @@
 
                     <article class="analysis-card">
                         <h3>AFND</h3>
-                        <div id="nfaDefinitions" class="analysis-content"></div>
+                        <div id="nfaDefinitions" class="analysis-content automata-content"></div>
                     </article>
 
                     <article class="analysis-card">
                         <h3>AFD equivalente</h3>
-                        <div id="dfaDefinitions" class="analysis-content"></div>
+                        <div id="dfaDefinitions" class="analysis-content automata-content"></div>
                     </article>
 
                     <article class="analysis-card wide-card">
@@ -150,12 +149,6 @@
                     <p class="section-description">Los atributos heredados descienden desde el padre; los sintetizados ascienden desde los hijos. Así se resuelven símbolos, tipos y reglas del workflow.</p>
                 </div>
 
-                <div class="attribute-flow">
-                    <div><span class="direction down">↓</span><strong>Heredados</strong><small>ámbito y contexto de ejecución</small></div>
-                    <div class="attribute-node">Nodo AST</div>
-                    <div><span class="direction up">↑</span><strong>Sintetizados</strong><small>tipo, valor y validez</small></div>
-                </div>
-
                 <div class="analysis-grid semantic-grid">
                     <article class="analysis-card">
                         <h3>Tabla de símbolos</h3>
@@ -184,6 +177,6 @@
         </section>
     </main>
 
-    <script src="{{ url_for('static', filename='app.js', v='pdf-rules-v4') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v='automata-ui-v5') }}"></script>
 </body>
 </html>

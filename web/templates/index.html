@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>DSL Delivery Workflow Compiler</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='analysis-ui-v3') }}">
 </head>
 <body>
     <main class="app-shell">
@@ -38,7 +38,7 @@
                         <h2>Codigo DSL</h2>
                         <button id="resetButton" type="button" class="secondary">Ejemplo</button>
                     </div>
-                    <textarea id="source" spellcheck="false">{{ example }}</textarea>
+                    <textarea id="source" spellcheck="false" placeholder="Sube reglas de negocio o pulsa Ejemplo para comenzar."></textarea>
                 </section>
 
                 <section class="panel results-panel">
@@ -142,7 +142,6 @@
 
             <section class="analysis-section syntax-section">
                 <div class="section-heading">
-                    <p class="eyebrow">Tokens → producciones → árbol</p>
                     <h2>Análisis sintáctico</h2>
                     <p class="section-description">La gramática libre de contexto define las combinaciones válidas; el parser descendente recursivo construye el árbol del programa analizado.</p>
                 </div>
@@ -170,7 +169,6 @@
 
             <section class="analysis-section semantic-section">
                 <div class="section-heading">
-                    <p class="eyebrow">Ámbito ↓ · tipo, valor y validez ↑</p>
                     <h2>Análisis semántico dirigido por atributos</h2>
                     <p class="section-description">Los atributos heredados descienden desde el padre; los sintetizados ascienden desde los hijos. Así se resuelven símbolos, tipos y reglas del workflow.</p>
                 </div>
@@ -212,6 +210,6 @@
     <script>
         window.DEFAULT_EXAMPLE = {{ example|tojson }};
     </script>
-    <script src="{{ url_for('static', filename='app.js', v='graphical-tree-v2') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v='rules-autoload-v3') }}"></script>
 </body>
 </html>

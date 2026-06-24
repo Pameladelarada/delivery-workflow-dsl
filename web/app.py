@@ -19,6 +19,14 @@ ALLOWED_RULE_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".csv", ".txt"}
 app = Flask(__name__)
 
 
+@app.after_request
+def disable_html_cache(response):
+    if response.mimetype == "text/html":
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
+
 def load_example() -> str:
     return EXAMPLE.read_text(encoding="utf-8")
 
@@ -116,6 +124,27 @@ def clean_extracted_text(text: str) -> str:
 
 def build_dsl_draft(rules_text: str) -> str:
     lower = rules_text.lower()
+    fields = {
+        "cliente": "Cliente desde reglas",
+        "producto": "Producto desde reglas",
+        "total": "80",
+        "pago": "YAPE",
+        "direccion": "Direccion pendiente",
+        "stock": "1",
+    }
+    patterns = {
+        "cliente": r"cliente\s*[:=,]\s*([A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9 ._-]+)",
+        "producto": r"producto\s*[:=,]\s*([A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9 ._-]+)",
+        "total": r"total\s*[:=,]\s*(\d+(?:\.\d+)?)",
+        "pago": r"pago\s*[:=,]\s*([A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9_-]+)",
+        "direccion": r"direccion\s*[:=,]\s*([A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9 ._-]+)",
+        "stock": r"stock\s*[:=,]\s*(\d+(?:\.\d+)?)",
+    }
+    for field, pattern in patterns.items():
+        match = re.search(pattern, rules_text, flags=re.IGNORECASE)
+        if match:
+            fields[field] = match.group(1).strip()[:80]
+
     validations = ["VALIDAR stock", "VALIDAR direccion", "VALIDAR pago"]
     if "cliente" in lower:
         validations.append("VALIDAR cliente")
@@ -130,12 +159,12 @@ def build_dsl_draft(rules_text: str) -> str:
     return "\n".join(
         [
             "PEDIDO {",
-            '    cliente: "Cliente desde reglas"',
-            '    producto: "Producto desde reglas"',
-            "    total: 80",
-            "    pago: YAPE",
-            '    direccion: "Direccion pendiente"',
-            "    stock: 1",
+            f'    cliente: "{fields["cliente"]}"',
+            f'    producto: "{fields["producto"]}"',
+            f"    total: {fields['total']}",
+            f"    pago: {fields['pago']}",
+            f'    direccion: "{fields["direccion"]}"',
+            f"    stock: {fields['stock']}",
             "}",
             "",
             *unique_validations,

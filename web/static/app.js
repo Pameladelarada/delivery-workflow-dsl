@@ -440,8 +440,14 @@ async function uploadRules() {
         }
         rulesPanel.classList.remove("is-hidden");
         rulesMeta.textContent = `${result.filename} - ${result.message}`;
-        rulesText.textContent = result.text;
         uploadedDslDraft = result.dsl_draft || "";
+        if (uploadedDslDraft.trim()) {
+            source.value = uploadedDslDraft.trim();
+            rulesText.textContent = uploadedDslDraft.trim();
+            await compile();
+        } else {
+            rulesText.textContent = result.text;
+        }
     } catch (error) {
         rulesPanel.classList.remove("is-hidden");
         rulesMeta.textContent = "Error al procesar archivo";
@@ -463,8 +469,10 @@ rulesFile.addEventListener("change", uploadRules);
 useRulesButton.addEventListener("click", () => {
     if (uploadedDslDraft.trim()) {
         source.value = uploadedDslDraft.trim();
+        compile();
     } else if (rulesText.textContent.trim()) {
         source.value = rulesText.textContent.trim();
+        compile();
     }
 });
 

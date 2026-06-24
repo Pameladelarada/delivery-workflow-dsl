@@ -91,23 +91,9 @@
 
             <section class="analysis-section">
                 <div class="section-heading">
-                    <p class="eyebrow">Del código fuente al autómata determinista</p>
-                    <h2>Análisis formal del lenguaje</h2>
-                    <p class="section-description">Cada etapa transforma la salida de la anterior. Sigue las flechas para leer la secuencia completa.</p>
-                </div>
-
-                <div class="formal-flow" aria-label="Secuencia del análisis formal">
-                    <div class="flow-step"><span>01</span><strong>Fuente DSL</strong><small>Caracteres de entrada</small></div>
-                    <div class="flow-arrow" aria-hidden="true">→</div>
-                    <div class="flow-step"><span>02</span><strong>Lexemas</strong><small>Fragmentos reconocibles</small></div>
-                    <div class="flow-arrow" aria-hidden="true">→</div>
-                    <div class="flow-step"><span>03</span><strong>Tokens</strong><small>Categorías léxicas</small></div>
-                    <div class="flow-arrow" aria-hidden="true">→</div>
-                    <div class="flow-step"><span>04</span><strong>ER</strong><small>Patrones formales</small></div>
-                    <div class="flow-arrow" aria-hidden="true">→</div>
-                    <div class="flow-step"><span>05</span><strong>AFND</strong><small>Autómata intermedio</small></div>
-                    <div class="flow-arrow" aria-hidden="true">→</div>
-                    <div class="flow-step"><span>06</span><strong>AFD</strong><small>Reconocedor ejecutable</small></div>
+                    <p class="eyebrow">Primera etapa del compilador</p>
+                    <h2>Análisis léxico</h2>
+                    <p class="section-description">El código fuente se separa en lexemas y se clasifica en tokens mediante expresiones regulares y autómatas.</p>
                 </div>
 
                 <div class="analysis-grid">
@@ -173,9 +159,11 @@
                     <article class="analysis-card tree-card wide-card">
                         <div class="card-heading">
                             <div><span class="card-kicker">AST</span><h3>Árbol sintáctico visual</h3></div>
-                            <span class="legend"><i></i> Nodo no terminal</span>
                         </div>
-                        <div id="syntaxTree" class="syntax-tree" aria-live="polite"></div>
+                        <div class="tree-visual-layout">
+                            <div id="syntaxTree" class="syntax-tree" aria-live="polite"></div>
+                            <aside id="treeLegend" class="tree-legend" aria-label="Descripción de nodos"></aside>
+                        </div>
                     </article>
                 </div>
             </section>
@@ -224,6 +212,6 @@
     <script>
         window.DEFAULT_EXAMPLE = {{ example|tojson }};
     </script>
-    <script src="{{ url_for('static', filename='app.js', v='syntax-semantic-v1') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v='graphical-tree-v2') }}"></script>
 </body>
 </html>

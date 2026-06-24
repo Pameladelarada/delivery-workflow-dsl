@@ -80,7 +80,7 @@ FINALIZAR pedido
 
 El compilador valida el codigo, genera logs del workflow y produce una salida JSON. La interfaz tambien presenta:
 
-- la secuencia visual del analisis formal (fuente, lexemas, tokens, ER, AFND y AFD);
+- el analisis lexico con lexemas, tokens, expresiones regulares y automatas;
 - la gramatica libre de contexto y el arbol sintactico abstracto;
 - la tabla de simbolos y los atributos semanticos heredados y sintetizados.
 

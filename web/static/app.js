@@ -23,6 +23,8 @@ const regexDefinitions = document.querySelector("#regexDefinitions");
 const nfaDefinitions = document.querySelector("#nfaDefinitions");
 const dfaDefinitions = document.querySelector("#dfaDefinitions");
 const transitionTables = document.querySelector("#transitionTables");
+const syntaxTreeOutput = document.querySelector("#syntaxTreeOutput");
+const semanticTreeOutput = document.querySelector("#semanticTreeOutput");
 let uploadedDslDraft = "";
 
 const TOKEN_DEFINITIONS = [
@@ -201,6 +203,8 @@ async function compile() {
         renderList(errors, ["Sube primero un archivo de reglas de negocio para generar el DSL."], "Error inesperado.");
         renderTokens([]);
         renderAnalysis([]);
+        if (syntaxTreeOutput) syntaxTreeOutput.textContent = "Aun no generado.";
+        if (semanticTreeOutput) semanticTreeOutput.textContent = "Aun no generado.";
         return;
     }
 
@@ -224,6 +228,8 @@ async function compile() {
         renderList(errors, result.errors, "Sin errores.");
         renderTokens(result.tokens);
         renderAnalysis(result.tokens);
+        if (syntaxTreeOutput) syntaxTreeOutput.textContent = result.syntaxTree ? JSON.stringify(result.syntaxTree, null, 2) : "Aun no generado.";
+        if (semanticTreeOutput) semanticTreeOutput.textContent = result.semanticTree ? JSON.stringify(result.semanticTree, null, 2) : "Aun no generado.";
     } catch (error) {
         setStatus(false);
         renderList(errors, [error.message], "Error inesperado.");

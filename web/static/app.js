@@ -23,6 +23,7 @@ const transitionTables = document.querySelector("#transitionTables");
 const parserType = document.querySelector("#parserType");
 const grammarRules = document.querySelector("#grammarRules");
 const syntaxTree = document.querySelector("#syntaxTree");
+const treeLegend = document.querySelector("#treeLegend");
 const symbolTable = document.querySelector("#symbolTable");
 const semanticChecks = document.querySelector("#semanticChecks");
 const semanticAttributes = document.querySelector("#semanticAttributes");
@@ -234,46 +235,131 @@ function renderGrammar(parserName = "descendente recursivo LL(1)") {
     `).join("");
 }
 
-function buildTreeNode(node) {
-    const item = document.createElement("li");
-    const box = document.createElement("div");
-    box.className = `tree-node ${node.children?.length ? "non-terminal" : "terminal"}`;
-    box.dataset.nodeId = node.id;
+const NODE_DESCRIPTIONS = {
+    Programa: "Nodo inicial que agrupa todo el workflow.",
+    Pedido: "Declaración de los datos del pedido.",
+    Propiedad: "Campo declarado dentro de PEDIDO.",
+    Texto: "Valor textual o identificador literal.",
+    Numero: "Valor numérico entero o decimal.",
+    Validacion: "Comprobación de un campo del pedido.",
+    Identificador: "Referencia a un símbolo declarado.",
+    Condicional: "Decisión introducida por SI.",
+    Condicion: "Comparación que produce un booleano.",
+    Operador: "Operador relacional de la comparación.",
+    Bloque: "Secuencia de sentencias condicionadas.",
+    Accion: "Operación ASIGNAR, INICIAR o FINALIZAR.",
+    Objetivo: "Recurso o proceso afectado por una acción.",
+    ErrorSintactico: "Fragmento que no cumple la gramática.",
+};
 
-    const symbol = document.createElement("strong");
-    symbol.textContent = node.symbol;
-    box.appendChild(symbol);
-    if (node.lexeme) {
-        const lexeme = document.createElement("span");
-        lexeme.textContent = node.lexeme;
-        box.appendChild(lexeme);
-    }
-    if (node.line) {
-        const line = document.createElement("small");
-        line.textContent = `línea ${node.line}`;
-        box.appendChild(line);
-    }
-    item.appendChild(box);
+function layoutSyntaxTree(root) {
+    const nodes = [];
+    const links = [];
+    const horizontalGap = 118;
+    const verticalGap = 118;
+    let leafIndex = 0;
+    let maxDepth = 0;
 
-    if (node.children?.length) {
-        const children = document.createElement("ul");
-        node.children.forEach((child) => children.appendChild(buildTreeNode(child)));
-        item.appendChild(children);
+    function visit(node, depth, parent = null) {
+        maxDepth = Math.max(maxDepth, depth);
+        const children = node.children || [];
+        const placedChildren = children.map((child) => visit(child, depth + 1, node));
+        const x = placedChildren.length
+            ? placedChildren.reduce((sum, child) => sum + child.x, 0) / placedChildren.length
+            : 62 + leafIndex++ * horizontalGap;
+        const placed = {node, x, y: 55 + depth * verticalGap, parent};
+        nodes.push(placed);
+        placedChildren.forEach((child) => links.push({from: placed, to: child}));
+        return placed;
     }
-    return item;
+
+    const rootPosition = visit(root, 0);
+    return {
+        nodes,
+        links,
+        rootX: rootPosition.x,
+        width: Math.max(720, 124 + Math.max(leafIndex - 1, 0) * horizontalGap),
+        height: 110 + maxDepth * verticalGap,
+    };
+}
+
+function svgElement(name, attributes = {}) {
+    const element = document.createElementNS("http://www.w3.org/2000/svg", name);
+    Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value));
+    return element;
+}
+
+function renderGraphicalTree(root) {
+    const layout = layoutSyntaxTree(root);
+    const svg = svgElement("svg", {
+        class: "syntax-tree-svg",
+        viewBox: `0 0 ${layout.width} ${layout.height}`,
+        width: layout.width,
+        height: layout.height,
+        role: "img",
+        "aria-label": "Árbol sintáctico abstracto del workflow",
+    });
+
+    const linksGroup = svgElement("g", {class: "tree-links"});
+    layout.links.forEach(({from, to}) => {
+        linksGroup.appendChild(svgElement("line", {x1: from.x, y1: from.y + 38, x2: to.x, y2: to.y - 38}));
+    });
+    svg.appendChild(linksGroup);
+
+    const nodesGroup = svgElement("g", {class: "tree-nodes"});
+    layout.nodes.forEach(({node, x, y}) => {
+        const group = svgElement("g", {
+            class: `tree-node-group ${node.children?.length ? "non-terminal" : "terminal"}`,
+            transform: `translate(${x} ${y})`,
+            "data-node-id": node.id,
+        });
+        group.appendChild(svgElement("circle", {r: 38}));
+        const title = svgElement("title");
+        title.textContent = `${node.symbol}${node.lexeme ? `: ${node.lexeme}` : ""}${node.line ? ` · línea ${node.line}` : ""}`;
+        group.appendChild(title);
+
+        const symbol = svgElement("text", {class: "node-symbol", y: node.lexeme ? -4 : 4});
+        symbol.textContent = node.symbol.length > 14 ? `${node.symbol.slice(0, 12)}…` : node.symbol;
+        group.appendChild(symbol);
+        if (node.lexeme) {
+            const lexeme = svgElement("text", {class: "node-lexeme", y: 13});
+            lexeme.textContent = node.lexeme.length > 12 ? `${node.lexeme.slice(0, 10)}…` : node.lexeme;
+            group.appendChild(lexeme);
+        }
+        nodesGroup.appendChild(group);
+    });
+    svg.appendChild(nodesGroup);
+    syntaxTree.appendChild(svg);
+    syntaxTree.scrollLeft = Math.max(0, layout.rootX - syntaxTree.clientWidth / 2);
+    syntaxTree.scrollTop = 0;
+}
+
+function renderTreeLegend(root) {
+    const symbols = [];
+    function collect(node) {
+        if (!symbols.includes(node.symbol)) symbols.push(node.symbol);
+        (node.children || []).forEach(collect);
+    }
+    collect(root);
+    treeLegend.innerHTML = `
+        <h4>Descripción de nodos</h4>
+        <dl>${symbols.map((symbol) => `
+            <div><dt>${escapeHtml(symbol)}</dt><dd>${escapeHtml(NODE_DESCRIPTIONS[symbol] || "Nodo de la gramática del DSL.")}</dd></div>
+        `).join("")}</dl>
+    `;
 }
 
 function renderSyntax(syntax) {
     renderGrammar(syntax?.parser || "descendente recursivo LL(1)");
     syntaxTree.innerHTML = "";
+    treeLegend.innerHTML = "";
     if (!syntax?.tree) {
         syntaxTree.innerHTML = '<p class="empty-state">Ejecuta el workflow para construir el árbol.</p>';
+        treeLegend.innerHTML = '<p class="legend-empty">La descripción de nodos aparecerá después del análisis.</p>';
         return;
     }
-    const root = document.createElement("ul");
-    root.className = "tree-root";
-    root.appendChild(buildTreeNode(syntax.tree));
-    syntaxTree.appendChild(root);
+    renderGraphicalTree(syntax.tree);
+    renderTreeLegend(syntax.tree);
 }
 
 function renderSemantic(semantic) {

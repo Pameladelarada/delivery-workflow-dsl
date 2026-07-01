@@ -1,5 +1,6 @@
 #include <cctype>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -527,100 +528,137 @@ static std::string readFile(const std::string& path) {
     return buffer.str();
 }
 
-static void printSyntaxNode(const SyntaxNode& node, int indent) {
+static void printSyntaxNode(std::ostringstream& out, const SyntaxNode& node, int indent) {
     std::string padding(static_cast<size_t>(indent), ' ');
-    std::cout << padding << "{\"id\": " << node.id
-              << ", \"symbol\": \"" << jsonEscape(node.symbol)
-              << "\", \"lexeme\": \"" << jsonEscape(node.lexeme)
-              << "\", \"line\": " << node.line << ", \"children\": [";
-    if (!node.children.empty()) std::cout << "\n";
+    out << padding << "{\"id\": " << node.id
+        << ", \"symbol\": \"" << jsonEscape(node.symbol)
+        << "\", \"lexeme\": \"" << jsonEscape(node.lexeme)
+        << "\", \"line\": " << node.line << ", \"children\": [";
+    if (!node.children.empty()) out << "\n";
     for (size_t i = 0; i < node.children.size(); ++i) {
-        printSyntaxNode(node.children[i], indent + 2);
-        std::cout << (i + 1 < node.children.size() ? ",\n" : "\n");
+        printSyntaxNode(out, node.children[i], indent + 2);
+        out << (i + 1 < node.children.size() ? ",\n" : "\n");
     }
-    if (!node.children.empty()) std::cout << padding;
-    std::cout << "]}";
+    if (!node.children.empty()) out << padding;
+    out << "]}";
 }
 
-static void printJson(const std::vector<Token>& tokens, const Parser& parser) {
+static std::string buildJson(const std::vector<Token>& tokens, const Parser& parser) {
+    std::ostringstream out;
     bool success = parser.errors().empty();
-    std::cout << "{\n";
-    std::cout << "  \"success\": " << (success ? "true" : "false") << ",\n";
+    out << "{\n";
+    out << "  \"success\": " << (success ? "true" : "false") << ",\n";
 
-    std::cout << "  \"tokens\": [\n";
+    out << "  \"tokens\": [\n";
     for (size_t i = 0; i < tokens.size(); ++i) {
         if (tokens[i].type == TokenType::End) continue;
-        std::cout << "    {\"type\": \"" << tokenTypeName(tokens[i].type)
-                  << "\", \"lexeme\": \"" << jsonEscape(tokens[i].lexeme)
-                  << "\", \"line\": " << tokens[i].line
-                  << ", \"column\": " << tokens[i].column << "}";
+        out << "    {\"type\": \"" << tokenTypeName(tokens[i].type)
+            << "\", \"lexeme\": \"" << jsonEscape(tokens[i].lexeme)
+            << "\", \"line\": " << tokens[i].line
+            << ", \"column\": " << tokens[i].column << "}";
         bool last = i + 1 >= tokens.size() || tokens[i + 1].type == TokenType::End;
-        std::cout << (last ? "\n" : ",\n");
+        out << (last ? "\n" : ",\n");
     }
-    std::cout << "  ],\n";
+    out << "  ],\n";
 
-    std::cout << "  \"order\": {";
+    out << "  \"order\": {";
     size_t count = 0;
     for (const auto& item : parser.order()) {
-        std::cout << (count++ ? ", " : "") << "\"" << jsonEscape(item.first) << "\": ";
-        if (item.second.isNumber) std::cout << item.second.raw;
-        else std::cout << "\"" << jsonEscape(item.second.raw) << "\"";
+        out << (count++ ? ", " : "") << "\"" << jsonEscape(item.first) << "\": ";
+        if (item.second.isNumber) out << item.second.raw;
+        else out << "\"" << jsonEscape(item.second.raw) << "\"";
     }
-    std::cout << "},\n";
+    out << "},\n";
 
-    std::cout << "  \"syntax\": {\n";
-    std::cout << "    \"parser\": \"descendente recursivo LL(1)\",\n";
-    std::cout << "    \"tree\": ";
-    printSyntaxNode(parser.tree(), 4);
-    std::cout << "\n  },\n";
+    out << "  \"syntax\": {\n";
+    out << "    \"parser\": \"descendente recursivo LL(1)\",\n";
+    out << "    \"tree\": ";
+    printSyntaxNode(out, parser.tree(), 4);
+    out << "\n  },\n";
 
-    std::cout << "  \"semantic\": {\n";
-    std::cout << "    \"symbols\": [";
+    out << "  \"semantic\": {\n";
+    out << "    \"symbols\": [";
     for (size_t i = 0; i < parser.symbols().size(); ++i) {
         const SymbolEntry& symbol = parser.symbols()[i];
-        std::cout << (i ? ", " : "")
-                  << "{\"name\": \"" << jsonEscape(symbol.name)
-                  << "\", \"type\": \"" << jsonEscape(symbol.type)
-                  << "\", \"value\": \"" << jsonEscape(symbol.value)
-                  << "\", \"line\": " << symbol.line << "}";
+        out << (i ? ", " : "")
+            << "{\"name\": \"" << jsonEscape(symbol.name)
+            << "\", \"type\": \"" << jsonEscape(symbol.type)
+            << "\", \"value\": \"" << jsonEscape(symbol.value)
+            << "\", \"line\": " << symbol.line << "}";
     }
-    std::cout << "],\n";
+    out << "],\n";
 
-    std::cout << "    \"attributes\": [\n";
+    out << "    \"attributes\": [\n";
     for (size_t i = 0; i < parser.attributes().size(); ++i) {
         const SemanticAttribute& attribute = parser.attributes()[i];
-        std::cout << "      {\"node_id\": " << attribute.nodeId
-                  << ", \"node\": \"" << jsonEscape(attribute.node)
-                  << "\", \"lexeme\": \"" << jsonEscape(attribute.lexeme)
-                  << "\", \"inherited\": {\"scope\": \"" << jsonEscape(attribute.inheritedScope)
-                  << "\", \"context\": \"" << jsonEscape(attribute.inheritedContext)
-                  << "\"}, \"synthesized\": {\"type\": \"" << jsonEscape(attribute.synthesizedType)
-                  << "\", \"value\": \"" << jsonEscape(attribute.synthesizedValue)
-                  << "\", \"valid\": " << (attribute.valid ? "true" : "false")
-                  << "}, \"rule\": \"" << jsonEscape(attribute.rule) << "\"}";
-        std::cout << (i + 1 < parser.attributes().size() ? ",\n" : "\n");
+        out << "      {\"node_id\": " << attribute.nodeId
+            << ", \"node\": \"" << jsonEscape(attribute.node)
+            << "\", \"lexeme\": \"" << jsonEscape(attribute.lexeme)
+            << "\", \"inherited\": {\"scope\": \"" << jsonEscape(attribute.inheritedScope)
+            << "\", \"context\": \"" << jsonEscape(attribute.inheritedContext)
+            << "\"}, \"synthesized\": {\"type\": \"" << jsonEscape(attribute.synthesizedType)
+            << "\", \"value\": \"" << jsonEscape(attribute.synthesizedValue)
+            << "\", \"valid\": " << (attribute.valid ? "true" : "false")
+            << "}, \"rule\": \"" << jsonEscape(attribute.rule) << "\"}";
+        out << (i + 1 < parser.attributes().size() ? ",\n" : "\n");
     }
-    std::cout << "    ],\n";
+    out << "    ],\n";
 
-    std::cout << "    \"checks\": [";
+    out << "    \"checks\": [";
     for (size_t i = 0; i < parser.semanticChecks().size(); ++i) {
-        std::cout << (i ? ", " : "") << "\"" << jsonEscape(parser.semanticChecks()[i]) << "\"";
+        out << (i ? ", " : "") << "\"" << jsonEscape(parser.semanticChecks()[i]) << "\"";
     }
-    std::cout << "]\n";
-    std::cout << "  },\n";
+    out << "]\n";
+    out << "  },\n";
 
-    std::cout << "  \"logs\": [";
+    out << "  \"logs\": [";
     for (size_t i = 0; i < parser.logs().size(); ++i) {
-        std::cout << (i ? ", " : "") << "\"" << jsonEscape(parser.logs()[i]) << "\"";
+        out << (i ? ", " : "") << "\"" << jsonEscape(parser.logs()[i]) << "\"";
     }
-    std::cout << "],\n";
+    out << "],\n";
 
-    std::cout << "  \"errors\": [";
+    out << "  \"errors\": [";
     for (size_t i = 0; i < parser.errors().size(); ++i) {
-        std::cout << (i ? ", " : "") << "\"" << jsonEscape(parser.errors()[i]) << "\"";
+        out << (i ? ", " : "") << "\"" << jsonEscape(parser.errors()[i]) << "\"";
     }
-    std::cout << "]\n";
-    std::cout << "}\n";
+    out << "]\n";
+    out << "}\n";
+    return out.str();
+}
+
+static std::string buildErrorJson(const std::string& message) {
+    std::ostringstream out;
+    out << "{\n";
+    out << "  \"success\": false,\n";
+    out << "  \"tokens\": [],\n";
+    out << "  \"order\": {},\n";
+    out << "  \"syntax\": {\"parser\": \"descendente recursivo LL(1)\", \"tree\": null},\n";
+    out << "  \"semantic\": {\"symbols\": [], \"attributes\": [], \"checks\": []},\n";
+    out << "  \"logs\": [],\n";
+    out << "  \"errors\": [\"" << jsonEscape(message) << "\"]\n";
+    out << "}\n";
+    return out.str();
+}
+
+// Traduccion final del compilador: persiste el JSON generado (exito o error)
+// en un archivo de salida, ademas de imprimirlo por stdout para que web/app.py
+// siga funcionando exactamente igual que antes.
+static void saveJsonFile(const std::string& jsonText) {
+    namespace fs = std::filesystem;
+    try {
+        fs::path outputDir = "output";
+        fs::create_directories(outputDir);
+
+        fs::path outputFile = outputDir / "last_compile.json";
+        std::ofstream outFile(outputFile, std::ios::binary);
+        if (!outFile) {
+            std::cerr << "Aviso: no se pudo escribir output/last_compile.json\n";
+            return;
+        }
+        outFile << jsonText;
+    } catch (const std::exception& ex) {
+        std::cerr << "Aviso: no se pudo exportar el JSON a archivo (" << ex.what() << ")\n";
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -636,18 +674,16 @@ int main(int argc, char* argv[]) {
         Parser parser(tokens);
         parser.parse();
         parser.semanticAnalysis();
-        printJson(tokens, parser);
+
+        std::string jsonText = buildJson(tokens, parser);
+        saveJsonFile(jsonText);
+        std::cout << jsonText;
+
         return parser.errors().empty() ? 0 : 2;
     } catch (const std::exception& ex) {
-        std::cout << "{\n";
-        std::cout << "  \"success\": false,\n";
-        std::cout << "  \"tokens\": [],\n";
-        std::cout << "  \"order\": {},\n";
-        std::cout << "  \"syntax\": {\"parser\": \"descendente recursivo LL(1)\", \"tree\": null},\n";
-        std::cout << "  \"semantic\": {\"symbols\": [], \"attributes\": [], \"checks\": []},\n";
-        std::cout << "  \"logs\": [],\n";
-        std::cout << "  \"errors\": [\"" << jsonEscape(ex.what()) << "\"]\n";
-        std::cout << "}\n";
+        std::string jsonText = buildErrorJson(ex.what());
+        saveJsonFile(jsonText);
+        std::cout << jsonText;
         return 1;
     }
 }

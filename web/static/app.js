@@ -1,6 +1,7 @@
 const source = document.querySelector("#source");
 const runButton = document.querySelector("#runButton");
 const uploadButton = document.querySelector("#uploadButton");
+const exportButton = document.querySelector("#exportButton");
 const rulesFile = document.querySelector("#rulesFile");
 const rulesPanel = document.querySelector("#rulesPanel");
 const rulesMeta = document.querySelector("#rulesMeta");
@@ -26,6 +27,7 @@ const symbolTable = document.querySelector("#symbolTable");
 const semanticChecks = document.querySelector("#semanticChecks");
 const semanticAttributes = document.querySelector("#semanticAttributes");
 let uploadedDslDraft = "";
+let lastResult = null;
 
 const GRAMMAR = [
     ["programa", "sentencia*"],
@@ -481,6 +483,8 @@ async function compile() {
             body: JSON.stringify({source: source.value}),
         });
         const result = await response.json();
+        lastResult = result;
+        exportButton.disabled = false;
         setStatus(result.success);
         client.textContent = result.order?.cliente ?? "-";
         total.textContent = result.order?.total ?? "-";
@@ -495,6 +499,78 @@ async function compile() {
     } finally {
         runButton.disabled = false;
         runButton.textContent = "Ejecutar workflow";
+    }
+}
+
+function slugify(value) {
+    return String(value || "")
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+}
+
+function defaultExportFilename(result) {
+    const now = new Date();
+    const pad = (value) => String(value).padStart(2, "0");
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_` +
+        `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const clientSlug = slugify(result?.order?.cliente);
+    return clientSlug ? `delivery_workflow_${clientSlug}_${stamp}.json` : `delivery_workflow_${stamp}.json`;
+}
+
+function downloadAsBlob(jsonText, filename) {
+    const blob = new Blob([jsonText], {type: "application/json"});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}
+
+async function exportResultToFile() {
+    if (!lastResult) return;
+
+    const jsonText = JSON.stringify(lastResult, null, 2);
+    const filename = defaultExportFilename(lastResult);
+    const originalLabel = exportButton.textContent;
+    exportButton.disabled = true;
+    exportButton.textContent = "Exportando...";
+
+    try {
+        if (window.showSaveFilePicker) {
+            // Abre el dialogo nativo "Guardar como": el nombre sugerido aparece
+            // pre-cargado pero el usuario puede cambiarlo antes de guardar.
+            const handle = await window.showSaveFilePicker({
+                suggestedName: filename,
+                types: [{description: "Archivo JSON", accept: {"application/json": [".json"]}}],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(jsonText);
+            await writable.close();
+            exportButton.textContent = "Exportado";
+        } else {
+            // Navegadores sin File System Access API (Firefox, Safari):
+            // se descarga con el nombre por defecto a la carpeta de descargas.
+            downloadAsBlob(jsonText, filename);
+            exportButton.textContent = "Descargado";
+        }
+    } catch (error) {
+        if (error?.name === "AbortError") {
+            exportButton.textContent = originalLabel;
+        } else {
+            console.error("Error al exportar JSON:", error);
+            exportButton.textContent = "Error al exportar";
+        }
+    } finally {
+        setTimeout(() => {
+            exportButton.textContent = originalLabel;
+            exportButton.disabled = false;
+        }, 1600);
     }
 }
 
@@ -540,6 +616,7 @@ async function uploadRules() {
 }
 
 runButton.addEventListener("click", compile);
+exportButton.addEventListener("click", exportResultToFile);
 uploadButton.addEventListener("click", () => rulesFile.click());
 rulesFile.addEventListener("change", uploadRules);
 useRulesButton.addEventListener("click", () => {

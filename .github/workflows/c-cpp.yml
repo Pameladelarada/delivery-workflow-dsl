@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   compilador:
-    name: Compilador DSL (${{ matrix.os }})
+    name: Compiler (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -23,29 +23,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Versión del compilador
+      - name: Compiler version
         run: g++ --version
 
-      - name: Compilar
+      - name: Build
         run: make
 
-      - name: El ejemplo válido debe compilar sin errores
+      - name: The valid example must compile with no errors
         run: |
           ./bin/delivery_compiler examples/pedido_basico.dsl > salida.json
           python3 -c "import json,sys; d=json.load(open('salida.json')); sys.exit(0 if d['success'] else 1)"
 
-      - name: El ejemplo con error semántico debe fallar con código 2
+      - name: The semantic-error example must fail with exit code 2
         run: |
           set +e
           ./bin/delivery_compiler examples/error_semantico.dsl > errores.json
           codigo=$?
           set -e
-          test "$codigo" -eq 2 || { echo "Se esperaba código 2, se obtuvo $codigo"; exit 1; }
+          test "$codigo" -eq 2 || { echo "Expected exit code 2, got $codigo"; exit 1; }
           python3 -c "import json,sys; d=json.load(open('errores.json')); sys.exit(0 if d['errors'] else 1)"
 
       # Regresión: una llave de cierre suelta colgaba el compilador para
       # siempre y consumía 350 MB de RAM en cinco segundos.
-      - name: Regresión — ninguna entrada debe dejar el compilador colgado
+      - name: Regression - no input may leave the compiler hanging
         if: runner.os == 'Linux'
         run: |
           # Estas entradas son invalidas a proposito, asi que el compilador
@@ -62,32 +62,32 @@ jobs:
             timeout 5 ./bin/delivery_compiler basura.dsl > /dev/null 2>&1 || codigo=$?
 
             if [ "$codigo" -eq 124 ]; then
-              echo "FALLO: la entrada '$entrada' dejo el compilador colgado"
+              echo "FAILED: input '$entrada' left the compiler hanging"
               fallos=$((fallos + 1))
             else
-              echo "ok: '$entrada' termino con codigo $codigo"
+              echo "ok: '$entrada' exited with code $codigo"
             fi
           done
 
           rm -f basura.dsl
 
           if [ "$fallos" -gt 0 ]; then
-            echo "$fallos entradas dejaron el compilador colgado"
+            echo "$fallos inputs left the compiler hanging"
             exit 1
           fi
 
-          echo "OK: todas las entradas terminan"
+          echo "OK: every input terminates"
 
       # Regresión: jsonEscape no escapaba los caracteres de control, así que
       # la salida dejaba de ser JSON y la web no podía leerla.
-      - name: Regresión — la salida siempre debe ser JSON válido
+      - name: Regression - the output must always be valid JSON
         run: |
           printf 'PEDIDO {\n    cliente: "A\001B"\n}\n' > control.dsl
           ./bin/delivery_compiler control.dsl > control.json || true
-          python3 -c "import json; json.load(open('control.json')); print('OK: JSON válido')"
+          python3 -c "import json; json.load(open('control.json')); print('OK: valid JSON')"
 
   pruebas:
-    name: Pruebas (Python ${{ matrix.python }})
+    name: Tests (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -102,47 +102,47 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
 
-      - name: Compilar el compilador DSL
+      - name: Build the DSL compiler
         run: make
 
-      - name: Instalar dependencias
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pytest
 
-      - name: Ejecutar las pruebas
+      - name: Run the test suite
         run: pytest tests/ -v
 
   docker:
-    name: La imagen de Docker construye y arranca
+    name: Docker image builds and boots
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Construir la imagen
+      - name: Build the image
         run: docker build -t delivery-workflow-dsl .
 
       # El despliegue estuvo roto por dos motivos que este paso detecta:
       # gunicorn faltaba en requirements.txt, y app.py buscaba un binario
       # con extensión .exe dentro de un contenedor Linux.
-      - name: El contenedor debe arrancar y responder
+      - name: The container must boot and respond
         run: |
           docker run -d --name dsl -p 5000:5000 -e PORT=5000 delivery-workflow-dsl
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:5000/ > /dev/null; then
-              echo "OK: el contenedor responde"
+              echo "OK: the container responds"
               break
             fi
             if [ "$i" -eq 30 ]; then
-              echo "FALLO: el contenedor no respondió"
+              echo "FAILED: the container did not respond"
               docker logs dsl
               exit 1
             fi
             sleep 2
           done
 
-      - name: El compilador debe funcionar dentro del contenedor
+      - name: The compiler must work inside the container
         run: |
           respuesta=$(curl -sf -X POST http://127.0.0.1:5000/compile \
             -H 'Content-Type: application/json' \
@@ -151,12 +151,12 @@ jobs:
           import json, sys
           d = json.load(sys.stdin)
           if not d['success']:
-              print('FALLO: el compilador no se encontró dentro del contenedor')
+              print('FAILED: the compiler was not found inside the container')
               print(d['errors'])
               sys.exit(1)
-          print(f'OK: {len(d[\"tokens\"])} tokens analizados dentro del contenedor')
+          print(f'OK: {len(d[\"tokens\"])} tokens analysed inside the container')
           "
 
-      - name: Registro del contenedor
+      - name: Container logs
         if: always()
         run: docker logs dsl || true

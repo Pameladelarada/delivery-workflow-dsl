@@ -1,21 +1,27 @@
+[English](README.md) · [Español](README.es.md)
+
 # Delivery Workflow DSL
 
-Un lenguaje propio para describir flujos de reparto, con su compilador escrito desde cero en C++ y una web donde se escribe el código y se ve el análisis en vivo.
+A domain-specific language for last-mile delivery workflows, with a compiler written from scratch in C++ and a web IDE that shows every stage of the analysis.
 
 [![CI](https://github.com/Pameladelarada/delivery-workflow-dsl/actions/workflows/c-cpp.yml/badge.svg)](https://github.com/Pameladelarada/delivery-workflow-dsl/actions/workflows/c-cpp.yml)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB)
-![Licencia](https://img.shields.io/badge/licencia-MIT-green)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-<!-- TODO: reemplazar por un GIF escribiendo DSL y viendo aparecer los tokens.
-     Guardarlo en docs/demo.gif y descomentar la linea de abajo. -->
-<!-- ![Demostración](docs/demo.gif) -->
+<!-- TODO: record a GIF writing DSL and watching the tokens appear.
+     Save it as docs/demo.gif and uncomment the line below. -->
+<!-- ![Demo](docs/demo.gif) -->
 
 ---
 
-## Qué es
+## The problem
 
-En vez de programar cada flujo de reparto a mano, se describe en un lenguaje hecho para eso:
+Delivery operations are a sequence of decisions that barely changes between companies: check stock, check the address, check the payment method, escalate the order if it is above a threshold, assign a courier, start and close the delivery.
+
+Coding that flow by hand in a general-purpose language buries the business rules inside control flow. An operations person cannot read it, and changing a threshold means touching production code.
+
+So I designed a small language where the flow *is* the rule:
 
 ```
 PEDIDO {
@@ -40,151 +46,176 @@ INICIAR entrega
 FINALIZAR pedido
 ```
 
-El compilador recorre las tres fases clásicas —**análisis léxico, sintáctico y semántico**— y devuelve un JSON con los tokens, el árbol sintáctico, el árbol semántico anotado, el registro del flujo y los errores encontrados.
+> **Why are the keywords in Spanish?** The domain is Peruvian last-mile delivery. `YAPE` is a local mobile payment method with no English equivalent, and the people who would write these rules work in Spanish. A domain-specific language should speak the language of its domain — that is the whole point of building one instead of using a general-purpose language.
 
-La web muestra cada fase por separado, así que se ve exactamente qué hace el compilador en cada paso.
+## What I built
 
----
-
-## El lenguaje
-
-### Tokens
-
-| Tipo | Qué reconoce | Ejemplo |
-|---|---|---|
-| `RESERVED` | Las seis palabras del lenguaje | `PEDIDO`, `VALIDAR`, `SI`, `ASIGNAR`, `INICIAR`, `FINALIZAR` |
-| `IDENTIFIER` | Letra o `_`, seguido de letras, dígitos o `_` | `cliente`, `prioridad_alta` |
-| `NUMBER` | Entero o decimal | `80`, `12.5` |
-| `STRING` | Texto entre comillas dobles | `"Av. Lima 123"` |
-| `LBRACE` / `RBRACE` | Delimitadores de bloque | `{` `}` |
-| `COLON` | Separador de propiedad | `:` |
-| `OPERATOR` | Comparación | `>` `<` `>=` `<=` `==` `!=` |
-
-Cada token guarda su **línea y columna**, que es lo que permite señalar dónde está cada error.
-
-### Gramática
-
-```bnf
-programa      ::= instruccion*
-
-instruccion   ::= pedido | validacion | condicional | accion
-
-pedido        ::= "PEDIDO" "{" propiedad* "}"
-propiedad     ::= identificador ":" valor
-valor         ::= cadena | numero | identificador
-
-validacion    ::= "VALIDAR" campo
-campo         ::= "stock" | "direccion" | "pago"
-                | "cliente" | "producto" | "total"
-
-condicional   ::= "SI" identificador operador valor "{" instruccion* "}"
-operador      ::= ">" | "<" | ">=" | "<=" | "==" | "!="
-
-accion        ::= ("ASIGNAR" | "INICIAR" | "FINALIZAR") identificador
-
-identificador ::= (letra | "_") (letra | digito | "_")*
-numero        ::= digito+ ("." digito+)?
-cadena        ::= '"' caracter* '"'
-```
-
-### Reglas semánticas
-
-El análisis sintáctico comprueba la forma; el semántico comprueba el sentido:
-
-| Regla | Error si no se cumple |
-|---|---|
-| Todo programa define un bloque `PEDIDO` | `el programa debe definir un bloque PEDIDO` |
-| `VALIDAR` solo acepta los seis campos del dominio | `VALIDAR <campo> no pertenece al dominio permitido` |
-| El campo validado existe en el `PEDIDO` | `no se puede validar '<campo>' porque no existe en PEDIDO` |
-| `stock` es un número mayor que cero | `stock debe ser un numero mayor que cero` |
-| `direccion` y `pago` no están vacíos | `<campo> no puede estar vacio` |
-| La variable de un `SI` existe en el `PEDIDO` | `la variable '<x>' no existe en PEDIDO` |
-| El operador es válido para los tipos comparados | `operador '<op>' no valido para los tipos comparados` |
-
-El bloque de un `SI` cuya condición es falsa se salta sin analizarse, igual que en un lenguaje real.
-
-### Códigos de salida
-
-| Código | Significado |
-|---|---|
-| `0` | El programa es válido |
-| `1` | No se pudo leer el archivo, o hubo un error léxico |
-| `2` | El programa tiene errores sintácticos o semánticos |
-
-La salida es **siempre** JSON válido, incluso cuando falla. Es el contrato con la web, y hay pruebas que lo verifican con entradas corruptas.
-
----
-
-## Arquitectura
+A compiler that runs the three classic stages and a web front end that shows each one separately, so the analysis is visible rather than a black box.
 
 ```
-    programa.dsl
+    program.dsl
          │
          ▼
   ┌─────────────┐
-  │   Lexer     │  caracteres → tokens (con línea y columna)
+  │   Lexer     │  characters → tokens, each carrying line and column
   └──────┬──────┘
          ▼
   ┌─────────────┐
-  │   Parser    │  tokens → árbol sintáctico
-  │             │  descendente recursivo, con recuperación de errores
+  │   Parser    │  tokens → syntax tree
+  │             │  recursive descent, with error recovery
   └──────┬──────┘
          ▼
   ┌─────────────┐
-  │  Semántico  │  árbol → árbol anotado + registro del flujo
+  │  Semantics  │  tree → annotated tree + workflow log
   └──────┬──────┘
          ▼
-    salida JSON  ──────►  web Flask  ──────►  navegador
+     JSON output  ──────►  Flask server  ──────►  browser
 ```
 
-El parser **no se detiene en el primer error**: registra lo que encontró, se sincroniza con la siguiente instrucción y sigue analizando, de modo que un programa con varios errores los reporta todos de una vez.
+No parser generators. No Lex, no Yacc, no ANTLR. The point of the exercise was to understand each stage, not to automate it away.
 
-### Estructura del repositorio
-
-```
-compiler/main.cpp     El compilador completo: lexer, parser y análisis semántico
-web/app.py            Servidor Flask y extracción de reglas desde documentos
-web/static/app.js     Interfaz: tokens, árboles y registro del flujo
-web/templates/        Plantilla de la página
-examples/             Programas DSL de prueba, válido y con error
-tests/                Pruebas del compilador y de la web
-docs/                 Especificación del proyecto
-tools/                Generadores de las guías en Word (material del curso)
-Dockerfile            Imagen para Railway: compila el C++ e instala Flask
-Makefile              Compilar, probar y levantar la web
-```
+**The parser does not stop at the first error.** It records what it found, resynchronises with the next statement and keeps going, so a program with five mistakes reports all five at once instead of one per run.
 
 ---
 
-## Cómo ejecutarlo
+## Engineering notes
 
-### Con make (Linux, macOS, WSL, Git Bash)
+These are the three problems that actually taught me something.
 
-```bash
-make          # compila el compilador del DSL
-make venv     # crea el entorno virtual e instala dependencias
-make web      # levanta la web en http://127.0.0.1:5000
-make test     # ejecuta las 54 pruebas
+### 1. Error recovery that could not make progress
+
+The recovery routine advanced until it found a reserved word or a closing brace, then returned control — **without consuming that token**. If the offending token *was* a closing brace, nothing advanced: the parser statement threw again on the same token, recovery returned again, and the loop never ended. The error list grew without bound.
+
+A file containing a single `}` was enough:
+
+```
+$ timeout 5 ./bin/delivery_compiler input.dsl
+exit=124        # never terminates
+RSS after 5s:   350 MB and climbing
 ```
 
-### Con PowerShell en Windows
+This mattered beyond the binary. The web server runs the compiler with a 10-second subprocess timeout, so every request with that content burned a full core for ten seconds and reached roughly 700 MB. Two or three concurrent requests would take down the container.
+
+The fix has two halves, and the second is the one I would defend in a review:
+
+- Recovery now **consumes** the closing brace before returning. Reserved words are left in place, because they open a statement the parser still has to handle.
+- The main loop **compares the token position before and after each statement** and advances if nothing was consumed. Even if some future code path fails to consume, the loop cannot stall.
+
+The first half fixes the bug I found. The second makes the whole class of bug impossible.
+
+### 2. A deployment that was broken twice over, silently
+
+The container built fine and then died on startup, for two independent reasons:
+
+- The `Dockerfile` started the app with `gunicorn`, but `gunicorn` was not in `requirements.txt`.
+- `app.py` looked for `bin/delivery_compiler.exe` while the `Dockerfile` compiled `bin/delivery_compiler`. Inside a Linux container, the app told the user to run a PowerShell script.
+
+Neither was visible from the code: both only appear when the container actually runs. So the fix is not just the two lines — it is the **CI job that builds the image, starts the container and posts a DSL program to it**. A regression of this shape cannot go unnoticed again.
+
+### 3. The output is a contract
+
+The web front end does `json.loads()` on the compiler's stdout. That makes "always emit valid JSON" a contract, not a nicety — and the escaping routine did not cover control characters, so a single `0x01` inside a string produced output the front end could not read. The user saw *"the compiler did not return valid JSON"* instead of the actual analysis.
+
+Now control characters are emitted as `\uXXXX`, and there are parametrised tests that feed the compiler corrupt input and assert the five contract keys are always present.
+
+---
+
+## The language
+
+### Tokens
+
+| Type | Matches | Example |
+|---|---|---|
+| `RESERVED` | The six keywords | `PEDIDO`, `VALIDAR`, `SI`, `ASIGNAR`, `INICIAR`, `FINALIZAR` |
+| `IDENTIFIER` | Letter or `_`, then letters, digits or `_` | `cliente`, `prioridad_alta` |
+| `NUMBER` | Integer or decimal | `80`, `12.5` |
+| `STRING` | Text between double quotes | `"Av. Lima 123"` |
+| `LBRACE` / `RBRACE` | Block delimiters | `{` `}` |
+| `COLON` | Property separator | `:` |
+| `OPERATOR` | Comparison | `>` `<` `>=` `<=` `==` `!=` |
+
+Every token carries its **line and column**, which is what makes precise error messages possible.
+
+### Grammar
+
+```bnf
+program       ::= statement*
+
+statement     ::= order | validation | conditional | action
+
+order         ::= "PEDIDO" "{" property* "}"
+property      ::= identifier ":" value
+value         ::= string | number | identifier
+
+validation    ::= "VALIDAR" field
+field         ::= "stock" | "direccion" | "pago"
+                | "cliente" | "producto" | "total"
+
+conditional   ::= "SI" identifier operator value "{" statement* "}"
+operator      ::= ">" | "<" | ">=" | "<=" | "==" | "!="
+
+action        ::= ("ASIGNAR" | "INICIAR" | "FINALIZAR") identifier
+
+identifier    ::= (letter | "_") (letter | digit | "_")*
+number        ::= digit+ ("." digit+)?
+string        ::= '"' character* '"'
+```
+
+### Semantic rules
+
+Parsing checks the shape; semantic analysis checks the meaning:
+
+| Rule | Error when violated |
+|---|---|
+| Every program defines a `PEDIDO` block | `el programa debe definir un bloque PEDIDO` |
+| `VALIDAR` only accepts the six domain fields | `VALIDAR <field> no pertenece al dominio permitido` |
+| The validated field exists in the order | `no se puede validar '<field>' porque no existe en PEDIDO` |
+| `stock` is a number greater than zero | `stock debe ser un numero mayor que cero` |
+| `direccion` and `pago` are not empty | `<field> no puede estar vacio` |
+| A conditional's variable exists in the order | `la variable '<x>' no existe en PEDIDO` |
+| The operator is valid for the compared types | `operador '<op>' no valido para los tipos comparados` |
+
+The body of a conditional whose test is false is skipped without being analysed, as in a real language.
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | The program is valid |
+| `1` | The file could not be read, or a lexical error occurred |
+| `2` | The program has syntax or semantic errors |
+
+The output is **always** valid JSON, including on failure.
+
+---
+
+## Running it
+
+### With make (Linux, macOS, WSL, Git Bash)
+
+```bash
+make          # build the compiler
+make venv     # create the virtualenv and install dependencies
+make web      # serve at http://127.0.0.1:5000
+make test     # run the 54 tests
+```
+
+### With PowerShell on Windows
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\run_web.ps1
 ```
 
-El script crea `.venv`, instala las dependencias, compila el programa C++ y abre la web.
-
-### Con Docker
+### With Docker
 
 ```bash
 docker build -t delivery-workflow-dsl .
 docker run -p 5000:5000 -e PORT=5000 delivery-workflow-dsl
 ```
 
-Es la misma imagen que usa Railway.
+Same image Railway deploys.
 
-### Solo el compilador, por línea de comandos
+### Compiler only
 
 ```bash
 ./bin/delivery_compiler examples/pedido_basico.dsl
@@ -194,11 +225,11 @@ Es la misma imagen que usa Railway.
 
 ## API
 
-| Método | Endpoint | Qué hace |
+| Method | Endpoint | Purpose |
 |---|---|---|
-| `GET` | `/` | La página con el editor |
-| `POST` | `/compile` | Compila el DSL del cuerpo y devuelve tokens, árboles, registro y errores |
-| `POST` | `/upload-rules` | Extrae reglas de un PDF, Word, Excel, CSV, JSON o TXT y genera una plantilla DSL |
+| `GET` | `/` | The editor page |
+| `POST` | `/compile` | Compiles the DSL in the body; returns tokens, trees, log and errors |
+| `POST` | `/upload-rules` | Extracts rules from a PDF, Word, Excel, CSV, JSON or TXT file and drafts a DSL template |
 
 ```bash
 curl -X POST http://127.0.0.1:5000/compile \
@@ -208,40 +239,46 @@ curl -X POST http://127.0.0.1:5000/compile \
 
 ---
 
-## Pruebas
+## Testing and CI
 
 ```bash
 make test
 ```
 
-54 pruebas con pytest, sin dependencias más allá del propio pytest:
+54 tests with pytest and no dependencies beyond pytest itself:
 
-- **37 del compilador**, que ejercitan el binario igual que lo hace la web
-- **17 de la web**, con el cliente de pruebas de Flask
+- **37 compiler tests** that drive the binary exactly as the web server does
+- **17 web tests** using Flask's test client, without starting a server
 
-Cubren las tres fases del análisis, el contrato de la salida JSON y una prueba de regresión por cada bug corregido. El CI las ejecuta en Ubuntu y macOS, contra Python 3.10, 3.11 y 3.12, y además construye la imagen de Docker y comprueba que el contenedor arranca y responde.
+They cover the three analysis stages, the JSON output contract, and one regression test per bug fixed — including a parametrised case that feeds eight kinds of garbage and asserts the compiler always terminates.
 
----
-
-## Decisiones técnicas
-
-- **Compilador escrito desde cero**, sin generadores como Lex o Yacc. El objetivo del proyecto es entender cada fase, no automatizarla.
-- **Recuperación de errores en el parser.** Al encontrar un error registra el problema, consume tokens hasta la siguiente instrucción y continúa. Garantizar que esa sincronización siempre avanza es lo que evita que el análisis se estanque.
-- **La salida es JSON, siempre.** Incluso ante un fallo del lector de archivos, para que la web nunca reciba algo que no pueda interpretar.
-- **Validación en el servidor y escapado en el cliente.** Los lexemas se muestran con `textContent`, nunca interpolados en HTML, porque provienen del texto que escribe el usuario.
-- **Límites explícitos en la subida de archivos.** 5 MB por archivo y 50 MB al descomprimir un `.docx` o un `.xlsx`, que son archivos ZIP y pueden expandirse mucho más de lo que ocupan.
+CI runs three jobs on every push and pull request: the compiler builds and its tests run on **Ubuntu and macOS**; the suite runs against **Python 3.10, 3.11 and 3.12**; and the **Docker image is built, started and sent a program**, which is the job that would have caught the deployment problem described above.
 
 ---
 
-## Limitaciones conocidas
+## Design decisions
 
-- El lenguaje no tiene bucles ni funciones: describe un flujo lineal con condicionales, que es lo que el dominio necesita.
-- El `SI` compara una variable del `PEDIDO` contra un literal; no admite expresiones compuestas ni operadores lógicos.
-- La extracción de reglas desde PDF es de mejor esfuerzo: un PDF escaneado sin capa de texto no se puede leer.
-- `tools/` contiene los generadores de las guías en Word del curso; no forman parte del producto.
+- **Hand-written compiler.** No parser generators, so every stage is code I can explain.
+- **Error recovery with a progress guarantee**, so the analysis can neither stop at the first mistake nor stall.
+- **JSON on every path**, including read failures, because the front end depends on it.
+- **Server-side validation, client-side escaping.** Lexemes are rendered with `textContent`, never interpolated into HTML, because they come from text the user typed.
+- **Explicit upload limits.** 5 MB per file and 50 MB uncompressed for `.docx` and `.xlsx`, which are ZIP archives and can expand far beyond their size on disk.
+
+## Known limitations
+
+- No loops or functions: the language describes a linear flow with conditionals, which is what the domain needs.
+- Conditionals compare one order variable against a literal; no compound expressions or logical operators.
+- PDF rule extraction is best-effort — a scanned PDF with no text layer cannot be read.
+- `tools/` holds the generators for the course's Word guides and is not part of the product.
+
+## What I would do next
+
+- Compile the workflow to an executable artifact instead of only validating it.
+- Let conditionals compare two order fields, not just a field against a literal.
+- Replace the string-based semantic errors with structured ones carrying line and column, so the editor can underline the exact token.
 
 ---
 
-## Licencia
+## License
 
-MIT — ver [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).

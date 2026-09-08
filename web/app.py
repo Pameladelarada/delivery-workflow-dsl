@@ -8,7 +8,11 @@ import unicodedata
 import zipfile
 from html import unescape
 from pathlib import Path
-from xml.etree import ElementTree
+# defusedxml en lugar de xml.etree: los .docx y .xlsx que se suben son XML
+# de origen desconocido, y la propia documentacion de Python advierte que sus
+# modulos XML no son seguros frente a datos maliciosos (expansion de
+# entidades, "billion laughs"). defusedxml expone la misma API y bloquea eso.
+from defusedxml import ElementTree
 
 from flask import Flask, jsonify, render_template, request
 
@@ -18,7 +22,29 @@ COMPILER = ROOT / "bin" / COMPILER_NAME
 EXAMPLE = ROOT / "examples" / "pedido_basico.dsl"
 ALLOWED_RULE_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".csv", ".json", ".txt"}
 
+# Tamano maximo del archivo que se sube. Sin esto, Flask acepta cualquier
+# tamano y una sola peticion puede llenar el disco del contenedor.
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
+# Un .docx o un .xlsx son archivos ZIP. Un ZIP pequeno puede descomprimirse
+# en varios gigabytes, asi que se comprueba el tamano declarado antes de leer.
+MAX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
+
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
+
+
+def abrir_zip_seguro(path: Path) -> zipfile.ZipFile:
+    """Abre un ZIP rechazandolo si al descomprimirse superaria el limite."""
+    archive = zipfile.ZipFile(path)
+    total = sum(info.file_size for info in archive.infolist())
+    if total > MAX_UNCOMPRESSED_BYTES:
+        archive.close()
+        raise ValueError(
+            "El archivo descomprimido supera el limite de "
+            f"{MAX_UNCOMPRESSED_BYTES // (1024 * 1024)} MB."
+        )
+    return archive
 
 FIELD_ALIASES = {
     "cliente": [
@@ -105,7 +131,7 @@ def load_example() -> str:
 
 def xml_text(path: Path, xml_names: list[str]) -> str:
     chunks = []
-    with zipfile.ZipFile(path) as archive:
+    with abrir_zip_seguro(path) as archive:
         for name in xml_names:
             if name not in archive.namelist():
                 continue
@@ -121,7 +147,7 @@ def extract_docx(path: Path) -> str:
 
 
 def extract_xlsx(path: Path) -> str:
-    with zipfile.ZipFile(path) as archive:
+    with abrir_zip_seguro(path) as archive:
         names = archive.namelist()
         shared = []
         if "xl/sharedStrings.xml" in names:
@@ -534,6 +560,20 @@ def extract_business_rules(path: Path) -> str:
     raise ValueError("Formato no soportado. Usa PDF, Word, Excel, CSV, JSON o TXT.")
 
 
+@app.errorhandler(413)
+def archivo_demasiado_grande(_error):
+    # Sin esto Flask devuelve una pagina HTML de error, y el cliente, que
+    # espera JSON, falla al interpretarla.
+    return jsonify(
+        {
+            "success": False,
+            "errors": [
+                f"El archivo supera el limite de {MAX_UPLOAD_BYTES // (1024 * 1024)} MB."
+            ],
+        }
+    ), 413
+
+
 @app.route("/")
 def index():
     return render_template("index.html", example=load_example())
@@ -630,8 +670,20 @@ def upload_rules():
                 "message": "Archivo procesado. Se genero una plantilla DSL compilable a partir de las reglas.",
             }
         )
-    except Exception as exc:
+    except ValueError as exc:
+        # ValueError son los mensajes pensados para el usuario (formato no
+        # soportado, archivo demasiado grande al descomprimir).
         return jsonify({"success": False, "errors": [str(exc)]}), 400
+    except Exception:
+        # Cualquier otro fallo puede llevar rutas internas del servidor en el
+        # mensaje, asi que se registra pero no se devuelve.
+        app.logger.exception("Fallo al procesar el archivo de reglas")
+        return jsonify(
+            {
+                "success": False,
+                "errors": ["No se pudo procesar el archivo. Revisa que no este dañado."],
+            }
+        ), 400
     finally:
         temp_path.unlink(missing_ok=True)
 

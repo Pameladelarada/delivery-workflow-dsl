@@ -122,12 +122,22 @@ function renderTokens(items) {
 
     Object.values(grouped).forEach((group) => {
         const row = document.createElement("tr");
-        row.innerHTML = `
-            <td>${group.type}</td>
-            <td>${[...group.lexemes].join(", ")}</td>
-            <td>${group.count}</td>
-            <td>${group.positions.join(", ")}</td>
-        `;
+
+        // El lexema es texto que escribio el usuario en el editor: puede
+        // contener HTML. Se inserta con textContent, que nunca lo interpreta.
+        const celdas = [
+            group.type,
+            [...group.lexemes].join(", "),
+            String(group.count),
+            group.positions.join(", "),
+        ];
+
+        celdas.forEach((valor) => {
+            const celda = document.createElement("td");
+            celda.textContent = valor;
+            row.appendChild(celda);
+        });
+
         tokens.appendChild(row);
     });
 }
@@ -142,12 +152,22 @@ function renderAnalysis(items) {
         lexemes: uniqueLexemes(items, definition.type),
     }));
 
-    lexemeGroups.innerHTML = tokensByType.map((group) => `
-        <div class="mini-block">
-            <strong>${group.type}</strong>
-            <p>${group.lexemes.length ? group.lexemes.join(", ") : "Sin lexemas detectados aun."}</p>
-        </div>
-    `).join("");
+    lexemeGroups.innerHTML = "";
+    tokensByType.forEach((group) => {
+        const bloque = document.createElement("div");
+        bloque.className = "mini-block";
+
+        const titulo = document.createElement("strong");
+        titulo.textContent = group.type;
+
+        const cuerpo = document.createElement("p");
+        cuerpo.textContent = group.lexemes.length
+            ? group.lexemes.join(", ")
+            : "Sin lexemas detectados aun.";
+
+        bloque.append(titulo, cuerpo);
+        lexemeGroups.appendChild(bloque);
+    });
 
     tokenDefinitions.innerHTML = TOKEN_DEFINITIONS.map((definition) => `
         <tr>

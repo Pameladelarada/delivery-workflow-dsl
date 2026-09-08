@@ -1,26 +1,143 @@
-name: Build and test DSL compiler
+name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main, version2]
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  compilador:
+    name: Compilador DSL (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versión del compilador
+        run: g++ --version
+
+      - name: Compilar
+        run: make
+
+      - name: El ejemplo válido debe compilar sin errores
+        run: |
+          ./bin/delivery_compiler examples/pedido_basico.dsl > salida.json
+          python3 -c "import json,sys; d=json.load(open('salida.json')); sys.exit(0 if d['success'] else 1)"
+
+      - name: El ejemplo con error semántico debe fallar con código 2
+        run: |
+          set +e
+          ./bin/delivery_compiler examples/error_semantico.dsl > errores.json
+          codigo=$?
+          set -e
+          test "$codigo" -eq 2 || { echo "Se esperaba código 2, se obtuvo $codigo"; exit 1; }
+          python3 -c "import json,sys; d=json.load(open('errores.json')); sys.exit(0 if d['errors'] else 1)"
+
+      # Regresión: una llave de cierre suelta colgaba el compilador para
+      # siempre y consumía 350 MB de RAM en cinco segundos.
+      - name: Regresión — ninguna entrada debe dejar el compilador colgado
+        if: runner.os == 'Linux'
+        run: |
+          for entrada in '}' '}}}}}}' '{{{{{{' '}{}{}{' ':::' 'PEDIDO }'; do
+            printf '%s\n' "$entrada" > basura.dsl
+            timeout 5 ./bin/delivery_compiler basura.dsl > /dev/null 2>&1
+            codigo=$?
+            if [ "$codigo" -eq 124 ]; then
+              echo "FALLO: la entrada '$entrada' dejó el compilador colgado"
+              exit 1
+            fi
+          done
+          echo "OK: todas las entradas terminan"
+
+      # Regresión: jsonEscape no escapaba los caracteres de control, así que
+      # la salida dejaba de ser JSON y la web no podía leerla.
+      - name: Regresión — la salida siempre debe ser JSON válido
+        run: |
+          printf 'PEDIDO {\n    cliente: "A\001B"\n}\n' > control.dsl
+          ./bin/delivery_compiler control.dsl > control.json || true
+          python3 -c "import json; json.load(open('control.json')); print('OK: JSON válido')"
+
+  pruebas:
+    name: Pruebas (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Compilar el compilador DSL
+        run: make
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+
+      - name: Ejecutar las pruebas
+        run: pytest tests/ -v
+
+  docker:
+    name: La imagen de Docker construye y arranca
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install compiler
-        run: sudo apt-get update && sudo apt-get install -y g++
+      - name: Construir la imagen
+        run: docker build -t delivery-workflow-dsl .
 
-      - name: Build C++ DSL compiler
+      # El despliegue estuvo roto por dos motivos que este paso detecta:
+      # gunicorn faltaba en requirements.txt, y app.py buscaba un binario
+      # con extensión .exe dentro de un contenedor Linux.
+      - name: El contenedor debe arrancar y responder
         run: |
-          mkdir -p bin
-          g++ -std=c++17 -O2 -Wall -Wextra compiler/main.cpp -o bin/delivery_compiler
+          docker run -d --name dsl -p 5000:5000 -e PORT=5000 delivery-workflow-dsl
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:5000/ > /dev/null; then
+              echo "OK: el contenedor responde"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "FALLO: el contenedor no respondió"
+              docker logs dsl
+              exit 1
+            fi
+            sleep 2
+          done
 
-      - name: Run DSL smoke test
+      - name: El compilador debe funcionar dentro del contenedor
         run: |
-          ./bin/delivery_compiler examples/pedido_basico.dsl
+          respuesta=$(curl -sf -X POST http://127.0.0.1:5000/compile \
+            -H 'Content-Type: application/json' \
+            -d "$(python3 -c "import json;print(json.dumps({'source':open('examples/pedido_basico.dsl').read()}))")")
+          echo "$respuesta" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          if not d['success']:
+              print('FALLO: el compilador no se encontró dentro del contenedor')
+              print(d['errors'])
+              sys.exit(1)
+          print(f'OK: {len(d[\"tokens\"])} tokens analizados dentro del contenedor')
+          "
+
+      - name: Registro del contenedor
+        if: always()
+        run: docker logs dsl || true

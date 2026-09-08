@@ -9,10 +9,6 @@ A domain-specific language for last-mile delivery workflows. I wrote the compile
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-<!-- TODO: record a GIF writing DSL and watching the tokens appear.
-     Save it as docs/demo.gif and uncomment the line below. -->
-<!-- ![Demo](docs/demo.gif) -->
-
 ---
 
 ## The problem

@@ -9,10 +9,6 @@ Un lenguaje de dominio específico para flujos de reparto de última milla. El c
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB)
 ![Licencia](https://img.shields.io/badge/licencia-MIT-green)
 
-<!-- TODO: grabar un GIF escribiendo DSL y viendo aparecer los tokens.
-     Guardarlo en docs/demo.gif y descomentar la línea de abajo. -->
-<!-- ![Demostración](docs/demo.gif) -->
-
 ---
 
 ## El problema

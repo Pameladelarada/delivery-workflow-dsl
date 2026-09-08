@@ -194,14 +194,28 @@ private:
 
 class Parser {
 public:
+    static constexpr size_t kMaxErrores = 100;
+
     explicit Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)) {}
 
     void parse() {
         while (!check(TokenType::End)) {
+            // Sin esta comprobacion el bucle podia estancarse: si statement()
+            // lanzaba sobre un token que synchronize() no consumia (una llave
+            // de cierre suelta, por ejemplo), la siguiente vuelta encontraba
+            // el mismo token, volvia a lanzar y errors_ crecia sin limite.
+            const size_t posicionAnterior = current_;
+
             ASTNode stmt = statement(false);
             if (stmt.type != "Error") {
                 syntaxTree_.push_back(stmt);
             }
+
+            if (current_ == posicionAnterior) {
+                advance();
+            }
+
+            if (demasiadosErrores()) return;
         }
     }
 
@@ -446,9 +460,30 @@ private:
 
     void synchronize() {
         while (!check(TokenType::End)) {
-            if (check(TokenType::Reserved) || check(TokenType::RBrace)) return;
+            // Una palabra reservada abre una instruccion nueva: hay que
+            // conservarla para que parse() la analice.
+            if (check(TokenType::Reserved)) return;
+
+            // Una llave de cierre, en cambio, hay que consumirla. Devolver el
+            // control sin avanzar dejaba a parse() mirando el mismo token una
+            // y otra vez.
+            if (check(TokenType::RBrace)) {
+                advance();
+                return;
+            }
+
             advance();
         }
+    }
+
+    // Un archivo muy dañado no debe generar una lista de errores infinita.
+    bool demasiadosErrores() {
+        if (errors_.size() < kMaxErrores) return false;
+        if (errors_.size() == kMaxErrores) {
+            errors_.push_back("Se alcanzo el maximo de " + std::to_string(kMaxErrores) +
+                              " errores; se detiene el analisis.");
+        }
+        return true;
     }
 };
 

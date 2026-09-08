@@ -162,7 +162,7 @@
     </main>
 
     <script>
-        window.DEFAULT_EXAMPLE = "";
+        window.DEFAULT_EXAMPLE = {{ example|tojson }};
     </script>
     <script src="{{ url_for('static', filename='app.js', v='tokens-grouped') }}"></script>
 </body>

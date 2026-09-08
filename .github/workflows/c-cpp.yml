@@ -48,15 +48,34 @@ jobs:
       - name: Regresión — ninguna entrada debe dejar el compilador colgado
         if: runner.os == 'Linux'
         run: |
+          # Estas entradas son invalidas a proposito, asi que el compilador
+          # devuelve un codigo distinto de cero. Lo que se comprueba aqui no es
+          # el codigo, sino que termine: 124 significa que timeout tuvo que
+          # matarlo. Sin "|| codigo=$?" el set -e de Actions abortaria el paso
+          # en la primera entrada, antes siquiera de mirar el codigo.
+          fallos=0
+
           for entrada in '}' '}}}}}}' '{{{{{{' '}{}{}{' ':::' 'PEDIDO }'; do
             printf '%s\n' "$entrada" > basura.dsl
-            timeout 5 ./bin/delivery_compiler basura.dsl > /dev/null 2>&1
-            codigo=$?
+
+            codigo=0
+            timeout 5 ./bin/delivery_compiler basura.dsl > /dev/null 2>&1 || codigo=$?
+
             if [ "$codigo" -eq 124 ]; then
-              echo "FALLO: la entrada '$entrada' dejó el compilador colgado"
-              exit 1
+              echo "FALLO: la entrada '$entrada' dejo el compilador colgado"
+              fallos=$((fallos + 1))
+            else
+              echo "ok: '$entrada' termino con codigo $codigo"
             fi
           done
+
+          rm -f basura.dsl
+
+          if [ "$fallos" -gt 0 ]; then
+            echo "$fallos entradas dejaron el compilador colgado"
+            exit 1
+          fi
+
           echo "OK: todas las entradas terminan"
 
       # Regresión: jsonEscape no escapaba los caracteres de control, así que

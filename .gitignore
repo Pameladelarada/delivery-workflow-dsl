@@ -32,3 +32,10 @@ desktop.ini
 # Pruebas
 .pytest_cache/
 tests/__pycache__/
+
+# Archivos que generan los pasos del CI al ejecutar el compilador
+salida.json
+errores.json
+control.json
+control.dsl
+basura.dsl

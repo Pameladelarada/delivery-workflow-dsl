@@ -2,7 +2,7 @@
 
 # Delivery Workflow DSL
 
-Un lenguaje de dominio específico para flujos de reparto de última milla, con su compilador escrito desde cero en C++ y una web que muestra cada fase del análisis.
+Un lenguaje de dominio específico para flujos de reparto de última milla. El compilador lo escribí desde cero en C++; la web que visualiza cada fase del análisis fue un trabajo de equipo.
 
 [![CI](https://github.com/Pameladelarada/delivery-workflow-dsl/actions/workflows/c-cpp.yml/badge.svg)](https://github.com/Pameladelarada/delivery-workflow-dsl/actions/workflows/c-cpp.yml)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C)
@@ -276,6 +276,20 @@ El CI ejecuta tres trabajos en cada push y cada pull request: el compilador se c
 - Compilar el workflow a un artefacto ejecutable, no solo validarlo.
 - Permitir que los condicionales comparen dos campos del pedido, no solo un campo contra un literal.
 - Sustituir los errores semánticos basados en cadenas por errores estructurados con línea y columna, para que el editor pueda subrayar el token exacto.
+
+---
+
+## Créditos
+
+El compilador —análisis léxico, sintáctico y semántico— es trabajo mío, igual
+que las correcciones descritas en las notas de ingeniería.
+
+Dos compañeros contribuyeron a la interfaz web:
+
+- [Josué Gutierrez](https://github.com/jussepe06) hizo los paneles de árbol
+  sintáctico y semántico.
+- [Ernest Arellano](https://github.com/ErnestArel) hizo la tabla de tokens
+  agrupada por tipo y lexema.
 
 ---
 

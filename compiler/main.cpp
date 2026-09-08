@@ -77,7 +77,20 @@ static std::string jsonEscape(const std::string& text) {
             case '\n': out << "\\n"; break;
             case '\r': out << "\\r"; break;
             case '\t': out << "\\t"; break;
-            default: out << c; break;
+            default:
+                // JSON prohibe los caracteres de control sin escapar. Dejarlos
+                // pasar producia una salida que json.loads() no podia leer, y
+                // la web mostraba "el compilador no devolvio JSON valido" en
+                // lugar del analisis real.
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    out << "\\u"
+                        << std::hex << std::setw(4) << std::setfill('0')
+                        << static_cast<int>(static_cast<unsigned char>(c))
+                        << std::dec << std::setfill(' ');
+                } else {
+                    out << c;
+                }
+                break;
         }
     }
     return out.str();
@@ -245,13 +258,24 @@ public:
                 errors_.push_back("Error semantico: no se puede validar '" + field + "' porque no existe en PEDIDO.");
                 continue;
             }
+            bool validacionCorrecta = true;
+
             if (field == "stock" && (!order_[field].isNumber || order_[field].number <= 0)) {
                 errors_.push_back("Error semantico: stock debe ser un numero mayor que cero.");
+                validacionCorrecta = false;
             }
             if ((field == "direccion" || field == "pago") && order_[field].raw.empty()) {
                 errors_.push_back("Error semantico: " + field + " no puede estar vacio.");
+                validacionCorrecta = false;
             }
-            logs_.push_back("Validacion aprobada: " + field);
+
+            // Sin esta condicion, el log decia "Validacion aprobada: stock"
+            // justo al lado del error que declaraba ese mismo stock invalido.
+            if (validacionCorrecta) {
+                logs_.push_back("Validacion aprobada: " + field);
+            } else {
+                logs_.push_back("Validacion rechazada: " + field);
+            }
         }
 
         for (const Action& action : actions_) {

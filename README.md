@@ -2,7 +2,7 @@
 
 # Delivery Workflow DSL
 
-A domain-specific language for last-mile delivery workflows, with a compiler written from scratch in C++ and a web IDE that shows every stage of the analysis.
+A domain-specific language for last-mile delivery workflows. I wrote the compiler from scratch in C++; the web IDE that visualises each stage of the analysis was a team effort.
 
 [![CI](https://github.com/Pameladelarada/delivery-workflow-dsl/actions/workflows/c-cpp.yml/badge.svg)](https://github.com/Pameladelarada/delivery-workflow-dsl/actions/workflows/c-cpp.yml)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C)
@@ -276,6 +276,20 @@ CI runs three jobs on every push and pull request: the compiler builds and its t
 - Compile the workflow to an executable artifact instead of only validating it.
 - Let conditionals compare two order fields, not just a field against a literal.
 - Replace the string-based semantic errors with structured ones carrying line and column, so the editor can underline the exact token.
+
+---
+
+## Credits
+
+The compiler — lexer, parser and semantic analysis — is my work, as is the
+hardening described in the engineering notes above.
+
+Two classmates contributed to the web front end:
+
+- [Josué Gutierrez](https://github.com/jussepe06) built the syntax and semantic
+  tree panels.
+- [Ernest Arellano](https://github.com/ErnestArel) built the token table grouped
+  by type and lexeme.
 
 ---
 

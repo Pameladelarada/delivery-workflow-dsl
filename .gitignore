@@ -1,9 +1,34 @@
+# Entornos virtuales de Python
 .venv/
+venv/
 __pycache__/
 *.pyc
+
+# Compilacion del compilador C++
 bin/
-docx_render/
-server.*.log
+build/
+*.exe
+*.o
+*.out
+
+# Logs
 *.log
-.pytest_cache/
+server.*.log
+
+# Artefactos de las herramientas de documentacion
+docx_render/
+docx_render_*/
+
+# Sistema operativo
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Pruebas
+.pytest_cache/
+tests/__pycache__/

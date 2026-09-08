@@ -24,15 +24,12 @@ try {
     if ($gpp) {
         Write-Host "Usando compilador: $($gpp.Source)"
         & $gpp.Source -std=c++17 -O2 -Wall -Wextra $source -o $output
-        if ($LASTEXITCODE -ne 0) { throw "g++ no pudo compilar el proyecto." }
     } elseif ($clang) {
         Write-Host "Usando compilador: $($clang.Source)"
         & $clang.Source -std=c++17 -O2 -Wall -Wextra $source -o $output
-        if ($LASTEXITCODE -ne 0) { throw "clang++ no pudo compilar el proyecto." }
     } elseif ($cl) {
         Write-Host "Usando compilador: $($cl.Source)"
         & $cl.Source /EHsc /std:c++17 /Fe:$output $source
-        if ($LASTEXITCODE -ne 0) { throw "cl no pudo compilar el proyecto." }
     } else {
         Write-Host "No se encontro un compilador C++."
         Write-Host "Instala MinGW-w64, LLVM/Clang o Visual Studio Build Tools."

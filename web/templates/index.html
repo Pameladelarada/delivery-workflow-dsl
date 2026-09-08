@@ -15,11 +15,13 @@
                     <h1>Delivery Workflow DSL</h1>
                 </div>
                 <div class="top-actions">
-                    <input id="rulesFile" type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" hidden>
+                    <input id="rulesFile" type="file" accept=".pdf,.docx,.xlsx,.csv,.json,.txt" hidden>
                     <button id="uploadButton" type="button" class="secondary">Subir reglas</button>
                     <button id="runButton" type="button">Ejecutar workflow</button>
                 </div>
             </header>
+
+            <textarea id="source" hidden></textarea>
 
             <section id="rulesPanel" class="panel rules-panel is-hidden">
                 <div class="panel-title">
@@ -27,20 +29,12 @@
                         <h2>Reglas de negocio cargadas</h2>
                         <p id="rulesMeta" class="panel-note"></p>
                     </div>
-                    <button id="useRulesButton" type="button" class="secondary">Usar como base</button>
+                    <button id="useRulesButton" type="button" class="secondary">Procesar reglas</button>
                 </div>
                 <pre id="rulesText" class="rules-text"></pre>
             </section>
 
             <div class="editor-grid">
-                <section class="panel editor-panel">
-                    <div class="panel-title">
-                        <h2>Codigo DSL</h2>
-                        <button id="resetButton" type="button" class="secondary">Ejemplo</button>
-                    </div>
-                    <textarea id="source" spellcheck="false">{{ example }}</textarea>
-                </section>
-
                 <section class="panel results-panel">
                     <div class="panel-title">
                         <h2>Resultado</h2>
@@ -53,8 +47,20 @@
                             <strong id="client">-</strong>
                         </div>
                         <div>
+                            <span>Producto</span>
+                            <strong id="product">-</strong>
+                        </div>
+                        <div>
                             <span>Total</span>
                             <strong id="total">-</strong>
+                        </div>
+                        <div>
+                            <span>Pago</span>
+                            <strong id="payment">-</strong>
+                        </div>
+                        <div>
+                            <span>Direccion</span>
+                            <strong id="address">-</strong>
                         </div>
                         <div>
                             <span>Estado</span>
@@ -68,6 +74,20 @@
                     <h3>Errores</h3>
                     <ul id="errors" class="list errors"></ul>
                 </section>
+
+                <section class="panel tree-panel">
+                    <div class="panel-title">
+                        <h2>Árbol Sintáctico (AST)</h2>
+                    </div>
+                    <pre id="syntaxTreeOutput" class="rules-text" style="max-height: 400px; overflow-y: auto;">Aun no generado.</pre>
+                </section>
+
+                <section class="panel tree-panel">
+                    <div class="panel-title">
+                        <h2>Árbol Semántico</h2>
+                    </div>
+                    <pre id="semanticTreeOutput" class="rules-text" style="max-height: 400px; overflow-y: auto;">Aun no generado.</pre>
+                </section>
             </div>
 
             <section class="panel token-panel">
@@ -79,9 +99,9 @@
                         <thead>
                             <tr>
                                 <th>Tipo</th>
-                                <th>Lexema</th>
-                                <th>Linea</th>
-                                <th>Columna</th>
+                                <th>Lexemas agrupados</th>
+                                <th>Cantidad</th>
+                                <th>Posiciones</th>
                             </tr>
                         </thead>
                         <tbody id="tokens"></tbody>
@@ -142,7 +162,7 @@
     </main>
 
     <script>
-        window.DEFAULT_EXAMPLE = {{ example|tojson }};
+        window.DEFAULT_EXAMPLE = "";
     </script>
     <script src="{{ url_for('static', filename='app.js', v='tokens-grouped') }}"></script>
 </body>

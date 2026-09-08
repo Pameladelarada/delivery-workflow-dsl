@@ -21,12 +21,6 @@ powershell -ExecutionPolicy Bypass -File .\run_web.ps1
 
 El script crea `.venv`, instala Flask, compila el programa C++ si hace falta y abre `http://127.0.0.1:5000`.
 
-## Despliegue en Railway
-
-El proyecto incluye `Dockerfile` y `railway.json`. Railway usa el `Dockerfile` para construir un contenedor Linux, instalar `g++`, compilar `compiler/main.cpp` como `bin/delivery_compiler` y ejecutar Flask con Gunicorn.
-
-Despues de subir estos archivos a GitHub, en Railway crea un nuevo proyecto desde el repositorio. Railway detectara el `Dockerfile` automaticamente.
-
 ## Ejecucion manual
 
 1. Crea un entorno virtual e instala Flask:

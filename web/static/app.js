@@ -9,7 +9,10 @@ const rulesText = document.querySelector("#rulesText");
 const useRulesButton = document.querySelector("#useRulesButton");
 const statusBadge = document.querySelector("#status");
 const client = document.querySelector("#client");
+const product = document.querySelector("#product");
 const total = document.querySelector("#total");
+const payment = document.querySelector("#payment");
+const address = document.querySelector("#address");
 const state = document.querySelector("#state");
 const logs = document.querySelector("#logs");
 const errors = document.querySelector("#errors");
@@ -20,6 +23,8 @@ const regexDefinitions = document.querySelector("#regexDefinitions");
 const nfaDefinitions = document.querySelector("#nfaDefinitions");
 const dfaDefinitions = document.querySelector("#dfaDefinitions");
 const transitionTables = document.querySelector("#transitionTables");
+const syntaxTreeOutput = document.querySelector("#syntaxTreeOutput");
+const semanticTreeOutput = document.querySelector("#semanticTreeOutput");
 let uploadedDslDraft = "";
 
 const TOKEN_DEFINITIONS = [
@@ -100,34 +105,30 @@ function renderTokens(items) {
         return;
     }
 
-    const groupedByType = items.reduce((groups, token) => {
-        if (!groups.has(token.type)) {
-            groups.set(token.type, new Map());
+    const grouped = items.reduce((acc, token) => {
+        if (!acc[token.type]) {
+            acc[token.type] = {
+                type: token.type,
+                lexemes: new Set(),
+                positions: [],
+                count: 0,
+            };
         }
-        const lexemes = groups.get(token.type);
-        if (!lexemes.has(token.lexeme)) {
-            lexemes.set(token.lexeme, []);
-        }
-        lexemes.get(token.lexeme).push(token);
-        return groups;
-    }, new Map());
+        acc[token.type].lexemes.add(token.lexeme);
+        acc[token.type].positions.push(`${token.line}:${token.column}`);
+        acc[token.type].count += 1;
+        return acc;
+    }, {});
 
-    groupedByType.forEach((lexemes, type) => {
-        let firstTypeRow = true;
-
-        lexemes.forEach((group) => {
-            group.forEach((token, index) => {
-                const row = document.createElement("tr");
-                row.innerHTML = `
-                    <td>${firstTypeRow ? type : ""}</td>
-                    <td>${index === 0 ? token.lexeme : ""}</td>
-                    <td>${token.line}</td>
-                    <td>${token.column}</td>
-                `;
-                tokens.appendChild(row);
-                firstTypeRow = false;
-            });
-        });
+    Object.values(grouped).forEach((group) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${group.type}</td>
+            <td>${[...group.lexemes].join(", ")}</td>
+            <td>${group.count}</td>
+            <td>${group.positions.join(", ")}</td>
+        `;
+        tokens.appendChild(row);
     });
 }
 
@@ -196,6 +197,17 @@ function renderAnalysis(items) {
 }
 
 async function compile() {
+    if (!source.value.trim()) {
+        setStatus(false);
+        renderList(logs, [], "Aun no hay logs.");
+        renderList(errors, ["Sube primero un archivo de reglas de negocio para generar el DSL."], "Error inesperado.");
+        renderTokens([]);
+        renderAnalysis([]);
+        if (syntaxTreeOutput) syntaxTreeOutput.textContent = "Aun no generado.";
+        if (semanticTreeOutput) semanticTreeOutput.textContent = "Aun no generado.";
+        return;
+    }
+
     runButton.disabled = true;
     runButton.textContent = "Ejecutando...";
 
@@ -208,11 +220,16 @@ async function compile() {
         const result = await response.json();
         setStatus(result.success);
         client.textContent = result.order?.cliente ?? "-";
+        product.textContent = result.order?.producto ?? "-";
         total.textContent = result.order?.total ?? "-";
+        payment.textContent = result.order?.pago ?? "-";
+        address.textContent = result.order?.direccion ?? "-";
         renderList(logs, result.logs, "Aun no hay logs.");
         renderList(errors, result.errors, "Sin errores.");
         renderTokens(result.tokens);
         renderAnalysis(result.tokens);
+        if (syntaxTreeOutput) syntaxTreeOutput.textContent = result.syntaxTree ? JSON.stringify(result.syntaxTree, null, 2) : "Aun no generado.";
+        if (semanticTreeOutput) semanticTreeOutput.textContent = result.semanticTree ? JSON.stringify(result.semanticTree, null, 2) : "Aun no generado.";
     } catch (error) {
         setStatus(false);
         renderList(errors, [error.message], "Error inesperado.");
@@ -243,8 +260,14 @@ async function uploadRules() {
         }
         rulesPanel.classList.remove("is-hidden");
         rulesMeta.textContent = `${result.filename} - ${result.message}`;
-        rulesText.textContent = result.text;
         uploadedDslDraft = result.dsl_draft || "";
+        if (uploadedDslDraft.trim()) {
+            source.value = uploadedDslDraft.trim();
+            rulesText.textContent = uploadedDslDraft.trim();
+            await compile();
+        } else {
+            rulesText.textContent = result.text;
+        }
     } catch (error) {
         rulesPanel.classList.remove("is-hidden");
         rulesMeta.textContent = "Error al procesar archivo";
@@ -258,16 +281,20 @@ async function uploadRules() {
 }
 
 runButton.addEventListener("click", compile);
-resetButton.addEventListener("click", () => {
-    source.value = window.DEFAULT_EXAMPLE;
-});
+if (resetButton) {
+    resetButton.addEventListener("click", () => {
+        source.value = window.DEFAULT_EXAMPLE;
+    });
+}
 uploadButton.addEventListener("click", () => rulesFile.click());
 rulesFile.addEventListener("change", uploadRules);
 useRulesButton.addEventListener("click", () => {
     if (uploadedDslDraft.trim()) {
         source.value = uploadedDslDraft.trim();
+        compile();
     } else if (rulesText.textContent.trim()) {
         source.value = rulesText.textContent.trim();
+        compile();
     }
 });
 

@@ -47,6 +47,12 @@ struct Action {
     bool conditional = false;
 };
 
+struct ASTNode {
+    std::string type;
+    std::map<std::string, std::string> attributes;
+    std::vector<ASTNode> children;
+};
+
 static std::string tokenTypeName(TokenType type) {
     switch (type) {
         case TokenType::Reserved: return "RESERVED";
@@ -192,10 +198,15 @@ public:
 
     void parse() {
         while (!check(TokenType::End)) {
-            statement(false);
+            ASTNode stmt = statement(false);
+            if (stmt.type != "Error") {
+                syntaxTree_.push_back(stmt);
+            }
         }
     }
 
+    const std::vector<ASTNode>& syntaxTree() const { return syntaxTree_; }
+    const std::vector<ASTNode>& semanticTree() const { return semanticTree_; }
     const std::map<std::string, OrderValue>& order() const { return order_; }
     const std::vector<Action>& actions() const { return actions_; }
     const std::vector<std::string>& validations() const { return validations_; }
@@ -203,6 +214,8 @@ public:
     const std::vector<std::string>& logs() const { return logs_; }
 
     void semanticAnalysis() {
+        semanticTree_ = syntaxTree_;
+        annotateSemanticTree(semanticTree_);
         std::set<std::string> allowedValidations = {"stock", "direccion", "pago", "cliente", "producto", "total"};
 
         if (order_.empty()) {
@@ -233,6 +246,8 @@ public:
     }
 
 private:
+    std::vector<ASTNode> syntaxTree_;
+    std::vector<ASTNode> semanticTree_;
     std::vector<Token> tokens_;
     size_t current_ = 0;
     std::map<std::string, OrderValue> order_;
@@ -240,6 +255,40 @@ private:
     std::vector<std::string> validations_;
     std::vector<std::string> errors_;
     std::vector<std::string> logs_;
+
+    void annotateSemanticTree(std::vector<ASTNode>& nodes) {
+        std::set<std::string> allowedValidations = {"stock", "direccion", "pago", "cliente", "producto", "total"};
+        for (auto& node : nodes) {
+            node.attributes["semanticCheck"] = "OK";
+            if (node.type == "VALIDAR") {
+                std::string field = node.attributes["field"];
+                if (!allowedValidations.count(field)) {
+                    node.attributes["semanticCheck"] = "Error: dominio no permitido";
+                } else if (!order_.count(field)) {
+                    node.attributes["semanticCheck"] = "Error: no existe en PEDIDO";
+                } else if (field == "stock" && (!order_[field].isNumber || order_[field].number <= 0)) {
+                    node.attributes["semanticCheck"] = "Error: stock <= 0";
+                } else if ((field == "direccion" || field == "pago") && order_[field].raw.empty()) {
+                    node.attributes["semanticCheck"] = "Error: vacio";
+                } else {
+                    node.attributes["semanticCheck"] = "Aprobado";
+                }
+            } else if (node.type == "PEDIDO") {
+                if (node.children.empty()) {
+                    node.attributes["semanticCheck"] = "Advertencia: PEDIDO vacio";
+                }
+            } else if (node.type == "SI") {
+                if (node.attributes["result"] == "false") {
+                    node.attributes["semanticCheck"] = "Condicion no cumplida";
+                } else {
+                    node.attributes["semanticCheck"] = "Condicion cumplida";
+                }
+            } else if (node.type == "ASIGNAR" || node.type == "INICIAR" || node.type == "FINALIZAR") {
+                 node.attributes["semanticCheck"] = "Accion registrada";
+            }
+            annotateSemanticTree(node.children);
+        }
+    }
 
     bool check(TokenType type) const { return tokens_[current_].type == type; }
     bool checkLexeme(const std::string& lexeme) const { return tokens_[current_].lexeme == lexeme; }
@@ -275,14 +324,14 @@ private:
         return {id.lexeme, false, 0.0};
     }
 
-    void statement(bool conditional) {
+    ASTNode statement(bool conditional) {
         try {
-            if (matchReserved("PEDIDO")) parseOrder();
-            else if (matchReserved("VALIDAR")) parseValidation();
-            else if (matchReserved("SI")) parseIf();
-            else if (matchReserved("ASIGNAR")) parseAction("ASIGNAR", conditional);
-            else if (matchReserved("INICIAR")) parseAction("INICIAR", conditional);
-            else if (matchReserved("FINALIZAR")) parseAction("FINALIZAR", conditional);
+            if (matchReserved("PEDIDO")) return parseOrder();
+            else if (matchReserved("VALIDAR")) return parseValidation();
+            else if (matchReserved("SI")) return parseIf();
+            else if (matchReserved("ASIGNAR")) return parseAction("ASIGNAR", conditional);
+            else if (matchReserved("INICIAR")) return parseAction("INICIAR", conditional);
+            else if (matchReserved("FINALIZAR")) return parseAction("FINALIZAR", conditional);
             else {
                 throw std::runtime_error("Instruccion no reconocida '" + tokens_[current_].lexeme +
                                          "' en linea " + std::to_string(tokens_[current_].line));
@@ -290,32 +339,38 @@ private:
         } catch (const std::exception& ex) {
             errors_.push_back(std::string("Error sintactico: ") + ex.what());
             synchronize();
+            return {"Error", {{"message", ex.what()}}, {}};
         }
     }
 
-    void parseOrder() {
+    ASTNode parseOrder() {
+        ASTNode node{"PEDIDO", {}, {}};
         consume(TokenType::LBrace, "Se esperaba '{' despues de PEDIDO");
         while (!check(TokenType::RBrace) && !check(TokenType::End)) {
             Token key = consumeIdentifierLike("Se esperaba el nombre de una propiedad del pedido");
             consume(TokenType::Colon, "Se esperaba ':' despues de la propiedad '" + key.lexeme + "'");
             OrderValue value = consumeValue();
             order_[key.lexeme] = value;
+            node.children.push_back({"Property", {{"key", key.lexeme}, {"value", value.raw}}, {}});
         }
         consume(TokenType::RBrace, "Se esperaba '}' para cerrar PEDIDO");
         logs_.push_back("Pedido registrado");
+        return node;
     }
 
-    void parseValidation() {
+    ASTNode parseValidation() {
         Token field = consumeIdentifierLike("Se esperaba el campo a validar");
         validations_.push_back(field.lexeme);
+        return {"VALIDAR", {{"field", field.lexeme}}, {}};
     }
 
-    void parseAction(const std::string& kind, bool conditional) {
+    ASTNode parseAction(const std::string& kind, bool conditional) {
         Token target = consumeIdentifierLike("Se esperaba el objetivo de la accion " + kind);
         actions_.push_back({kind, target.lexeme, conditional});
+        return {kind, {{"target", target.lexeme}, {"conditional", conditional ? "true" : "false"}}, {}};
     }
 
-    void parseIf() {
+    ASTNode parseIf() {
         Condition condition;
         Token left = consumeIdentifierLike("Se esperaba variable en condicion SI");
         condition.left = left.lexeme;
@@ -328,11 +383,19 @@ private:
         logs_.push_back("Condicion SI " + condition.left + " " + condition.op + " " + condition.right.raw +
                         (result ? " aprobada" : " no aprobada"));
 
+        ASTNode node{"SI", {{"left", condition.left}, {"op", condition.op}, {"right", condition.right.raw}, {"result", result ? "true" : "false"}}, {}};
+
         while (!check(TokenType::RBrace) && !check(TokenType::End)) {
-            if (result) statement(true);
-            else skipStatement();
+            if (result) {
+                ASTNode stmt = statement(true);
+                if (stmt.type != "Error") node.children.push_back(stmt);
+            } else {
+                ASTNode stmt = skipStatementAsNode();
+                node.children.push_back(stmt);
+            }
         }
         consume(TokenType::RBrace, "Se esperaba '}' para cerrar SI");
+        return node;
     }
 
     bool evaluate(const Condition& condition) {
@@ -353,6 +416,12 @@ private:
         if (condition.op == "!=") return left.raw != condition.right.raw;
         errors_.push_back("Error semantico: operador '" + condition.op + "' no valido para los tipos comparados.");
         return false;
+    }
+
+    ASTNode skipStatementAsNode() {
+        int startLine = tokens_[current_].line;
+        skipStatement();
+        return {"SkippedBranch", {{"line", std::to_string(startLine)}}, {}};
     }
 
     void skipStatement() {
@@ -391,6 +460,36 @@ static std::string readFile(const std::string& path) {
     return buffer.str();
 }
 
+static void printAstNodeJson(const ASTNode& node, const std::string& indent = "") {
+    std::cout << "{\n";
+    std::cout << indent << "  \"type\": \"" << jsonEscape(node.type) << "\"";
+    if (!node.attributes.empty()) {
+        std::cout << ",\n" << indent << "  \"attributes\": {\n";
+        bool first = true;
+        for (const auto& attr : node.attributes) {
+            if (!first) std::cout << ",\n";
+            std::cout << indent << "    \"" << jsonEscape(attr.first) << "\": \"" << jsonEscape(attr.second) << "\"";
+            first = false;
+        }
+        std::cout << "\n" << indent << "  }";
+    } else {
+        std::cout << ",\n" << indent << "  \"attributes\": {}";
+    }
+    if (!node.children.empty()) {
+        std::cout << ",\n" << indent << "  \"children\": [\n";
+        for (size_t i = 0; i < node.children.size(); ++i) {
+            std::cout << indent << "    ";
+            printAstNodeJson(node.children[i], indent + "    ");
+            if (i + 1 < node.children.size()) std::cout << ",";
+            std::cout << "\n";
+        }
+        std::cout << indent << "  ]";
+    } else {
+        std::cout << ",\n" << indent << "  \"children\": []";
+    }
+    std::cout << "\n" << indent << "}";
+}
+
 static void printJson(const std::vector<Token>& tokens, const Parser& parser) {
     bool success = parser.errors().empty();
     std::cout << "{\n";
@@ -427,7 +526,27 @@ static void printJson(const std::vector<Token>& tokens, const Parser& parser) {
     for (size_t i = 0; i < parser.errors().size(); ++i) {
         std::cout << (i ? ", " : "") << "\"" << jsonEscape(parser.errors()[i]) << "\"";
     }
-    std::cout << "]\n";
+    std::cout << "],\n";
+
+    std::cout << "  \"syntaxTree\": [\n";
+    const auto& st = parser.syntaxTree();
+    for (size_t i = 0; i < st.size(); ++i) {
+        std::cout << "    ";
+        printAstNodeJson(st[i], "    ");
+        if (i + 1 < st.size()) std::cout << ",";
+        std::cout << "\n";
+    }
+    std::cout << "  ],\n";
+
+    std::cout << "  \"semanticTree\": [\n";
+    const auto& semt = parser.semanticTree();
+    for (size_t i = 0; i < semt.size(); ++i) {
+        std::cout << "    ";
+        printAstNodeJson(semt[i], "    ");
+        if (i + 1 < semt.size()) std::cout << ",";
+        std::cout << "\n";
+    }
+    std::cout << "  ]\n";
     std::cout << "}\n";
 }
 
@@ -452,7 +571,9 @@ int main(int argc, char* argv[]) {
         std::cout << "  \"tokens\": [],\n";
         std::cout << "  \"order\": {},\n";
         std::cout << "  \"logs\": [],\n";
-        std::cout << "  \"errors\": [\"" << jsonEscape(ex.what()) << "\"]\n";
+        std::cout << "  \"errors\": [\"" << jsonEscape(ex.what()) << "\"],\n";
+        std::cout << "  \"syntaxTree\": [],\n";
+        std::cout << "  \"semanticTree\": []\n";
         std::cout << "}\n";
         return 1;
     }
